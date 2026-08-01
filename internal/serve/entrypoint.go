@@ -10,7 +10,7 @@ import (
 )
 
 // Run starts the HTTP server for caddy forward_auth probes.
-func Run(logger *log.Logger, appConfig *config.AppConfig) error {
+func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) error {
 	services, err := auth.LoadServicesFromEnv()
 	if err != nil {
 		return fmt.Errorf("services: %w", err)
@@ -20,7 +20,8 @@ func Run(logger *log.Logger, appConfig *config.AppConfig) error {
 	origins := appConfig.AllowedOriginList()
 
 	logger.Printf(
-		"starting intern-auth-gateway on %s (origins=%d services=%d)",
+		"starting %s on %s (origins=%d services=%d)",
+		shortName,
 		addr,
 		len(origins),
 		len(services),
@@ -34,6 +35,6 @@ func Run(logger *log.Logger, appConfig *config.AppConfig) error {
 		}
 	}
 
-	handler := NewHandler(logger, appConfig, services)
+	handler := NewHandler(logger, appConfig.Verbose, origins, services, shortName)
 	return http.ListenAndServe(addr, handler)
 }

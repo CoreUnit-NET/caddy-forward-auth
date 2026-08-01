@@ -11,7 +11,6 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/NobleMajo/intern-auth-gateway/internal/auth"
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
 )
 
 func testLogger(t *testing.T) *log.Logger {
@@ -28,14 +27,8 @@ func mustHash(t *testing.T, password string) string {
 	return string(hash)
 }
 
-func testConfig(t *testing.T) *config.AppConfig {
-	t.Helper()
-	return &config.AppConfig{
-		Verbose:        false,
-		Host:           "127.0.0.1",
-		Port:           8080,
-		AllowedOrigins: "intern-auth.example.com, localhost",
-	}
+func testOrigins() []string {
+	return []string{"intern-auth.example.com", "localhost"}
 }
 
 func testServices(t *testing.T) map[string]auth.ServiceCred {
@@ -54,13 +47,18 @@ func testServices(t *testing.T) map[string]auth.ServiceCred {
 	}
 }
 
+func testHandler(t *testing.T) http.Handler {
+	t.Helper()
+	return NewHandler(testLogger(t), false, testOrigins(), testServices(t), "test-realm")
+}
+
 func basicHeader(user, pass string) string {
 	token := base64.StdEncoding.EncodeToString([]byte(user + ":" + pass))
 	return "Basic " + token
 }
 
 func TestAuthProbeSuccess(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Host = "auth.local"
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -79,7 +77,7 @@ func TestAuthProbeSuccess(t *testing.T) {
 }
 
 func TestAuthProbeUnauthorized(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "wrong"))
@@ -95,7 +93,7 @@ func TestAuthProbeUnauthorized(t *testing.T) {
 }
 
 func TestAuthProbeOriginRejected(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -109,7 +107,7 @@ func TestAuthProbeOriginRejected(t *testing.T) {
 }
 
 func TestAuthProbeWildcardHost(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Forwarded-Host", "api.intern.example.com")
 	req.Header.Set("Authorization", basicHeader("intern-user", "intern-secret"))
@@ -122,7 +120,7 @@ func TestAuthProbeWildcardHost(t *testing.T) {
 }
 
 func TestAuthProbeNoMatchingService(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "unknown.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -135,7 +133,7 @@ func TestAuthProbeNoMatchingService(t *testing.T) {
 }
 
 func TestAuthProbeUnknownPathNotFound(t *testing.T) {
-	h := NewHandler(testLogger(t), testConfig(t), testServices(t))
+	h := testHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/foo", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
