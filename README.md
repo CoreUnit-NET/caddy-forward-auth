@@ -73,6 +73,7 @@ Services are configured **only through environment variables** with the `SERVICE
 | Value | `hostGlob/username/passwordHash` |
 | Parsing | Split on `/` with at most **two** separators (`SplitN`); the bcrypt hash may contain `/` |
 | `hostGlob` | Exact hostname, or `*` for a single DNS label (for example `*.intern.example.com`) |
+| `username` | Must be **unique** across all `SERVICE_*` entries (startup fails on duplicates) |
 | `passwordHash` | bcrypt hash (for example `$2a$…`) |
 
 Example:
