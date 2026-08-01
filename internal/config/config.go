@@ -8,14 +8,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const serviceEnvPrefix = "SERVICE_"
-
-type ServiceCred struct {
-	HostGlob     string
-	Username     string
-	PasswordHash string
-}
-
 type AppConfig struct {
 	Verbose     bool
 	ShowVersion bool
@@ -25,7 +17,6 @@ type AppConfig struct {
 	Host           string
 	Port           int
 	AllowedOrigins string
-	Services       map[string]ServiceCred
 }
 
 func defaultAppConfig() *AppConfig {
@@ -37,7 +28,6 @@ func defaultAppConfig() *AppConfig {
 		Host:           "0.0.0.0",
 		Port:           8080,
 		AllowedOrigins: "",
-		Services:       map[string]ServiceCred{},
 	}
 }
 
@@ -53,7 +43,7 @@ func versionCommand(appConfig *AppConfig) *cobra.Command {
 }
 
 func serveCommand(appConfig *AppConfig) *cobra.Command {
-	cmd := &cobra.Command{
+	return &cobra.Command{
 		Use:   "serve",
 		Short: "Start the HTTP server",
 		Run: func(cmd *cobra.Command, args []string) {
@@ -61,8 +51,6 @@ func serveCommand(appConfig *AppConfig) *cobra.Command {
 			appConfig.Subcommand = "serve"
 		},
 	}
-	applyServeFlags(appConfig, cmd)
-	return cmd
 }
 
 func loadEnvVars(appConfig *AppConfig) {
@@ -80,63 +68,11 @@ func loadEnvVars(appConfig *AppConfig) {
 	})
 }
 
-// loadServiceEnvVars scans the process environment for SERVICE_* entries.
-// Values must be hostGlob/username/passwordHash with exactly two separating slashes
-// (password hashes may contain additional '/' characters).
-func loadServiceEnvVars(appConfig *AppConfig) error {
-	services := make(map[string]ServiceCred)
-	for _, entry := range os.Environ() {
-		key, value, ok := strings.Cut(entry, "=")
-		if !ok || !strings.HasPrefix(key, serviceEnvPrefix) {
-			continue
-		}
-		name := strings.TrimPrefix(key, serviceEnvPrefix)
-		if name == "" {
-			return fmt.Errorf("invalid service env %q: empty service name", key)
-		}
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
-		cred, err := parseServiceValue(key, value)
-		if err != nil {
-			return err
-		}
-		services[name] = cred
-	}
-	appConfig.Services = services
-	return nil
-}
-
-func parseServiceValue(envKey, value string) (ServiceCred, error) {
-	parts := strings.SplitN(value, "/", 3)
-	if len(parts) != 3 {
-		return ServiceCred{}, fmt.Errorf(
-			"invalid %s value %q: want hostGlob/username/passwordHash (exactly 2 separating slashes)",
-			envKey,
-			value,
-		)
-	}
-	hostGlob := strings.TrimSpace(parts[0])
-	username := strings.TrimSpace(parts[1])
-	passwordHash := strings.TrimSpace(parts[2])
-	if hostGlob == "" || username == "" || passwordHash == "" {
-		return ServiceCred{}, fmt.Errorf(
-			"invalid %s value %q: hostGlob, username, and passwordHash must be non-empty",
-			envKey,
-			value,
-		)
-	}
-	return ServiceCred{
-		HostGlob:     hostGlob,
-		Username:     username,
-		PasswordHash: passwordHash,
-	}, nil
-}
-
 func applyServeFlags(appConfig *AppConfig, cmd *cobra.Command) {
-	cmd.Flags().StringVar(&appConfig.Host, "host", appConfig.Host, "bind address (HOST)")
-	cmd.Flags().IntVar(&appConfig.Port, "port", appConfig.Port, "listen port (PORT)")
-	cmd.Flags().StringVar(&appConfig.AllowedOrigins, "allowed-origins", appConfig.AllowedOrigins, "CSV of allowed Origin hostnames (ALLOWED_ORIGINS)")
+	// Persistent so bare root and `serve` share one definition (explorer-mcp style).
+	cmd.PersistentFlags().StringVar(&appConfig.Host, "host", appConfig.Host, "bind address (HOST)")
+	cmd.PersistentFlags().IntVar(&appConfig.Port, "port", appConfig.Port, "listen port (PORT)")
+	cmd.PersistentFlags().StringVar(&appConfig.AllowedOrigins, "allowed-origins", appConfig.AllowedOrigins, "CSV of allowed Origin hostnames (ALLOWED_ORIGINS)")
 }
 
 func ParseConfig(
@@ -163,7 +99,6 @@ func ParseConfig(
 	rootCmd.PersistentFlags().BoolVarP(&appConfig.Verbose, "verbose", "b", appConfig.Verbose, "enable verbose mode (VERBOSE)")
 	rootCmd.Flags().BoolVarP(&appConfig.ShowVersion, "version", "v", appConfig.ShowVersion, "prints version")
 
-	// Serve flags on root so bare `intern-auth-gateway --port 8080` works.
 	applyServeFlags(appConfig, rootCmd)
 
 	loadEnvVars(appConfig)
@@ -196,11 +131,6 @@ func ParseConfig(
 	if appConfig.ShowVersion {
 		fmt.Println(displayName + " version " + version + ", build " + commit)
 		os.Exit(0)
-	}
-
-	if err := loadServiceEnvVars(appConfig); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
 	}
 
 	if appConfig.Subcommand == "" {

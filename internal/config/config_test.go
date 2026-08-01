@@ -14,12 +14,6 @@ func clearConfigEnv(t *testing.T) {
 	} {
 		t.Setenv(key, "")
 	}
-	for _, entry := range os.Environ() {
-		key, _, ok := strings.Cut(entry, "=")
-		if ok && strings.HasPrefix(key, serviceEnvPrefix) {
-			t.Setenv(key, "")
-		}
-	}
 }
 
 func TestParseConfigDefaults(t *testing.T) {
@@ -44,9 +38,6 @@ func TestParseConfigDefaults(t *testing.T) {
 	}
 	if cfg.Subcommand != "serve" {
 		t.Fatalf("Subcommand = %q, want serve", cfg.Subcommand)
-	}
-	if len(cfg.Services) != 0 {
-		t.Fatalf("Services len = %d, want 0", len(cfg.Services))
 	}
 }
 
@@ -87,73 +78,6 @@ func TestParseConfigFlagsAndEnv(t *testing.T) {
 	origins := cfg.AllowedOriginList()
 	if len(origins) != 2 || origins[0] != "a.example.com" || origins[1] != "b.example.com" {
 		t.Fatalf("AllowedOriginList = %#v", origins)
-	}
-}
-
-func TestParseConfigServices(t *testing.T) {
-	oldArgs := os.Args
-	t.Cleanup(func() { os.Args = oldArgs })
-	clearConfigEnv(t)
-
-	t.Setenv("SERVICE_test", "test.example.com/tester/$2a$14$AnhQELX1cqeO3YaLPOTWtOuPsKZgweRHrYLcqzQUcvokbVZmzNWrO")
-	t.Setenv("SERVICE_intern", "*.intern.example.com/intern-user/$2a$14$54tdWftb4iOouKyfDyURPuI6rOIwcbjqKYfzOqYE0PyOcmVFnU1mM")
-	// bcrypt-like hash that itself contains '/'
-	t.Setenv("SERVICE_slash", "app.example.com/user/$2a$14$abc/def/ghi")
-
-	os.Args = []string{"intern-auth-gateway", "serve"}
-	cfg := ParseConfig("Demo", "demo", "1.0.0", "abc")
-
-	if len(cfg.Services) != 3 {
-		t.Fatalf("Services len = %d, want 3", len(cfg.Services))
-	}
-
-	testCred := cfg.Services["test"]
-	if testCred.HostGlob != "test.example.com" || testCred.Username != "tester" {
-		t.Fatalf("SERVICE_test = %#v", testCred)
-	}
-	if !strings.HasPrefix(testCred.PasswordHash, "$2a$14$") {
-		t.Fatalf("unexpected password hash %q", testCred.PasswordHash)
-	}
-
-	slashCred := cfg.Services["slash"]
-	if slashCred.PasswordHash != "$2a$14$abc/def/ghi" {
-		t.Fatalf("slash hash = %q, want preserved inner slashes", slashCred.PasswordHash)
-	}
-}
-
-func TestParseServiceValueErrors(t *testing.T) {
-	_, err := parseServiceValue("SERVICE_bad", "only-one-part")
-	if err == nil {
-		t.Fatal("expected error for missing separators")
-	}
-	_, err = parseServiceValue("SERVICE_bad", "a/b")
-	if err == nil {
-		t.Fatal("expected error for one separator")
-	}
-	_, err = parseServiceValue("SERVICE_bad", "/user/hash")
-	if err == nil {
-		t.Fatal("expected error for empty host glob")
-	}
-}
-
-func TestParseConfigInvalidServiceExits(t *testing.T) {
-	if os.Getenv("TEST_INVALID_SERVICE_EXIT") == "1" {
-		os.Args = []string{"intern-auth-gateway", "serve"}
-		_ = ParseConfig("Demo", "demo", "1.0.0", "abc")
-		return
-	}
-
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseConfigInvalidServiceExits", "-test.v")
-	cmd.Env = append(os.Environ(),
-		"TEST_INVALID_SERVICE_EXIT=1",
-		"SERVICE_bad=nope",
-	)
-	out, err := cmd.CombinedOutput()
-	if err == nil {
-		t.Fatalf("expected non-zero exit, output: %s", out)
-	}
-	if !strings.Contains(string(out), "SERVICE_bad") {
-		t.Fatalf("expected SERVICE_bad in output, got: %s", out)
 	}
 }
 
