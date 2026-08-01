@@ -9,13 +9,12 @@ import (
 )
 
 // NewHandler builds the HTTP handler used for caddy forward_auth probes.
-// Only exact "/" and "/auth" paths are registered (README contract).
-// The in-handler path gate is required because Go's "/" pattern is a catch-all.
+// Only exact "/" and "/auth" paths are accepted (README contract).
+// A single "/" registration is used because Go's "/" pattern is a catch-all;
+// the in-handler path gate rejects every other path with 404.
 func NewHandler(logger *log.Logger, verbose bool, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.Handler {
 	mux := http.NewServeMux()
-	probe := authProbe(logger, verbose, allowedOrigins, services, realm)
-	mux.HandleFunc("/", probe)
-	mux.HandleFunc("/auth", probe)
+	mux.HandleFunc("/", authProbe(logger, verbose, allowedOrigins, services, realm))
 	return mux
 }
 
@@ -27,9 +26,10 @@ func authProbe(logger *log.Logger, verbose bool, allowedOrigins []string, servic
 			return
 		}
 
-		if !auth.OriginAllowed(r.Header.Get("Origin"), allowedOrigins) {
+		origin := r.Header.Get("Origin")
+		if !auth.OriginAllowed(origin, allowedOrigins) {
 			if verbose {
-				logger.Printf("origin rejected: %q", r.Header.Get("Origin"))
+				logger.Printf("origin rejected: %q", origin)
 			}
 			http.Error(w, "origin not allowed", http.StatusForbidden)
 			return
@@ -83,6 +83,8 @@ func unauthorized(w http.ResponseWriter, realm string) {
 	if realm == "" {
 		realm = "restricted"
 	}
+	realm = strings.ReplaceAll(realm, `\`, `\\`)
+	realm = strings.ReplaceAll(realm, `"`, `\"`)
 	w.Header().Set("WWW-Authenticate", `Basic realm="`+realm+`"`)
 	http.Error(w, "unauthorized", http.StatusUnauthorized)
 }
