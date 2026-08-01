@@ -63,3 +63,45 @@ func TestFindServicesForHost(t *testing.T) {
 		t.Fatalf("expected no matches, got %#v", got)
 	}
 }
+
+func TestHostGlobsOverlap(t *testing.T) {
+	tests := []struct {
+		a, b string
+		want bool
+	}{
+		{"*.example.com", "api.example.com", true},
+		{"*.example.com", "*.example.com", true},
+		{"*", "anything.example.com", true},
+		{"a.example.com", "b.example.com", false},
+		{"*.example.com", "*.other.com", false},
+		{"*.intern.example.com", "api.intern.example.com", true},
+		{"*.example.com", "*.*.example.com", false},
+		{"", "api.example.com", false},
+	}
+	for _, tt := range tests {
+		got := HostGlobsOverlap(tt.a, tt.b)
+		if got != tt.want {
+			t.Fatalf("HostGlobsOverlap(%q, %q) = %v, want %v", tt.a, tt.b, got, tt.want)
+		}
+		got = HostGlobsOverlap(tt.b, tt.a)
+		if got != tt.want {
+			t.Fatalf("HostGlobsOverlap(%q, %q) = %v, want %v", tt.b, tt.a, got, tt.want)
+		}
+	}
+}
+
+func TestOverlappingHostGlobPairs(t *testing.T) {
+	services := map[string]ServiceCred{
+		"exact":  {HostGlob: "api.example.com", Username: "a", PasswordHash: "h1"},
+		"glob":   {HostGlob: "*.example.com", Username: "b", PasswordHash: "h2"},
+		"unique": {HostGlob: "unique.test", Username: "d", PasswordHash: "h4"},
+	}
+
+	pairs := OverlappingHostGlobPairs(services)
+	if len(pairs) != 1 {
+		t.Fatalf("pairs = %#v, want one overlapping pair", pairs)
+	}
+	if pairs[0][0] != "exact" || pairs[0][1] != "glob" {
+		t.Fatalf("pair = %#v, want [exact glob]", pairs[0])
+	}
+}

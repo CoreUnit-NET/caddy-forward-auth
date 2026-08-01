@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"sort"
 	"strings"
 )
 
@@ -29,6 +30,57 @@ func FindServicesForHost(services map[string]ServiceCred, host string) []Service
 		}
 	}
 	return matched
+}
+
+// HostGlobsOverlap reports whether two host globs can both match the same host
+// under HostMatches rules (case-insensitive; '*' is one DNS label; bare '*' is any host).
+func HostGlobsOverlap(a, b string) bool {
+	a = strings.ToLower(strings.TrimSpace(a))
+	b = strings.ToLower(strings.TrimSpace(b))
+	if a == "" || b == "" {
+		return false
+	}
+	if a == "*" || b == "*" {
+		return true
+	}
+	aParts := strings.Split(a, ".")
+	bParts := strings.Split(b, ".")
+	if len(aParts) != len(bParts) {
+		return false
+	}
+	for i := range aParts {
+		ap, bp := aParts[i], bParts[i]
+		if ap == "*" || bp == "*" {
+			continue
+		}
+		if ap != bp {
+			return false
+		}
+	}
+	return true
+}
+
+// OverlappingHostGlobPairs returns sorted service-name pairs whose host globs overlap.
+func OverlappingHostGlobPairs(services map[string]ServiceCred) [][2]string {
+	if len(services) < 2 {
+		return nil
+	}
+	names := make([]string, 0, len(services))
+	for name := range services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	pairs := make([][2]string, 0)
+	for i := 0; i < len(names); i++ {
+		for j := i + 1; j < len(names); j++ {
+			left, right := names[i], names[j]
+			if HostGlobsOverlap(services[left].HostGlob, services[right].HostGlob) {
+				pairs = append(pairs, [2]string{left, right})
+			}
+		}
+	}
+	return pairs
 }
 
 func matchHostGlob(pattern, host string) bool {

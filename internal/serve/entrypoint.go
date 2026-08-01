@@ -26,6 +26,16 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 		len(origins),
 		len(services),
 	)
+	for _, pair := range auth.OverlappingHostGlobPairs(services) {
+		left, right := pair[0], pair[1]
+		logger.Printf(
+			"warning: overlapping host globs for SERVICE_%s (%s) and SERVICE_%s (%s)",
+			left,
+			services[left].HostGlob,
+			right,
+			services[right].HostGlob,
+		)
+	}
 	if appConfig.Verbose {
 		for name, cred := range services {
 			logger.Printf("service %s -> hostGlob=%s user=%s", name, cred.HostGlob, cred.Username)
