@@ -1,4 +1,4 @@
-module github.com/NobleMajo/intern-auth-gateway
+module github.com/CoreUnit-NET/intern-auth-gateway
 
 go 1.25.0
 

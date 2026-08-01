@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/NobleMajo/intern-auth-gateway/internal/auth"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
 )
 
 // NewHandler builds the HTTP handler used for caddy forward_auth probes.

@@ -91,10 +91,10 @@ func ParseConfig(
 	rootCmd := &cobra.Command{
 		Use: shortName,
 		Short: displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
-			"For more help, visit https://github.com/NobleMajo/intern-auth-gateway",
+			"For more help, visit https://github.com/CoreUnit-NET/intern-auth-gateway",
 		Long: displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
 			"Running without a subcommand starts the HTTP server (same as '" + shortName + " serve').\n" +
-			"For more help, visit https://github.com/NobleMajo/intern-auth-gateway",
+			"For more help, visit https://github.com/CoreUnit-NET/intern-auth-gateway",
 		Run: func(cmd *cobra.Command, args []string) {
 			appConfig.Subcommand = "serve"
 		},

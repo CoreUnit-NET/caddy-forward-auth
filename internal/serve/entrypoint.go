@@ -5,8 +5,8 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/NobleMajo/intern-auth-gateway/internal/auth"
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
 )
 
 // Run starts the HTTP server for caddy forward_auth probes.

@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
-	"github.com/NobleMajo/intern-auth-gateway/internal/serve"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/serve"
 	"github.com/joho/godotenv"
 )
 

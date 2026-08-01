@@ -10,7 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/NobleMajo/intern-auth-gateway/internal/auth"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
 )
 
 func testLogger(t *testing.T) *log.Logger {
