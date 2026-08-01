@@ -2,8 +2,6 @@ package auth
 
 import (
 	"testing"
-
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
 )
 
 func TestHostMatches(t *testing.T) {
@@ -32,7 +30,7 @@ func TestHostMatches(t *testing.T) {
 }
 
 func TestFindServicesForHost(t *testing.T) {
-	services := map[string]config.ServiceCred{
+	services := map[string]ServiceCred{
 		"test": {
 			HostGlob:     "test.example.com",
 			Username:     "tester",

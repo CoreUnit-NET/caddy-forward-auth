@@ -2,8 +2,6 @@ package auth
 
 import (
 	"strings"
-
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
 )
 
 // HostMatches reports whether host matches the SERVICE_* host glob.
@@ -20,14 +18,18 @@ func HostMatches(hostGlob, host string) bool {
 }
 
 // FindServicesForHost returns every configured service whose host glob matches host.
-func FindServicesForHost(services map[string]config.ServiceCred, host string) []config.ServiceCred {
+func FindServicesForHost(services map[string]ServiceCred, host string) []ServiceCred {
 	host = normalizeHost(host)
 	if host == "" || len(services) == 0 {
 		return nil
 	}
-	matched := make([]config.ServiceCred, 0)
+	matched := make([]ServiceCred, 0)
 	for _, cred := range services {
-		if HostMatches(cred.HostGlob, host) {
+		glob := strings.ToLower(strings.TrimSpace(cred.HostGlob))
+		if glob == "" {
+			continue
+		}
+		if matchHostGlob(glob, host) {
 			matched = append(matched, cred)
 		}
 	}

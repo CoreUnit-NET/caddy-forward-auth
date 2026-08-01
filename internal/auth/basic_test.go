@@ -4,8 +4,6 @@ import (
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
-
-	"github.com/NobleMajo/intern-auth-gateway/internal/config"
 )
 
 func mustHash(t *testing.T, password string) string {
@@ -19,7 +17,7 @@ func mustHash(t *testing.T, password string) string {
 
 func TestCheckBasicAuth(t *testing.T) {
 	hash := mustHash(t, "secret")
-	cred := config.ServiceCred{
+	cred := ServiceCred{
 		HostGlob:     "test.example.com",
 		Username:     "tester",
 		PasswordHash: hash,
@@ -43,7 +41,7 @@ func TestCheckBasicAuth(t *testing.T) {
 }
 
 func TestCheckBasicAuthAgainstServices(t *testing.T) {
-	creds := []config.ServiceCred{
+	creds := []ServiceCred{
 		{
 			HostGlob:     "a.example.com",
 			Username:     "alice",
@@ -68,9 +66,8 @@ func TestCheckBasicAuthAgainstServices(t *testing.T) {
 }
 
 func TestCheckBasicAuthHashWithSlashes(t *testing.T) {
-	// Ensure CompareHashAndPassword still works for hashes that contain '/'.
 	hash := mustHash(t, "slashy")
-	cred := config.ServiceCred{Username: "u", PasswordHash: hash}
+	cred := ServiceCred{Username: "u", PasswordHash: hash}
 	if !CheckBasicAuth(cred, "u", "slashy") {
 		t.Fatal("expected hash with possible '/' to verify")
 	}
