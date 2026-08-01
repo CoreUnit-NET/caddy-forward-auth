@@ -5,11 +5,17 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/NobleMajo/intern-auth-gateway/internal/auth"
 	"github.com/NobleMajo/intern-auth-gateway/internal/config"
 )
 
 // Run starts the HTTP server for caddy forward_auth probes.
 func Run(logger *log.Logger, appConfig *config.AppConfig) error {
+	services, err := auth.LoadServicesFromEnv()
+	if err != nil {
+		return fmt.Errorf("services: %w", err)
+	}
+
 	addr := fmt.Sprintf("%s:%d", appConfig.Host, appConfig.Port)
 	origins := appConfig.AllowedOriginList()
 
@@ -17,10 +23,10 @@ func Run(logger *log.Logger, appConfig *config.AppConfig) error {
 		"starting intern-auth-gateway on %s (origins=%d services=%d)",
 		addr,
 		len(origins),
-		len(appConfig.Services),
+		len(services),
 	)
 	if appConfig.Verbose {
-		for name, cred := range appConfig.Services {
+		for name, cred := range services {
 			logger.Printf("service %s -> hostGlob=%s user=%s", name, cred.HostGlob, cred.Username)
 		}
 		for _, origin := range origins {
@@ -28,6 +34,6 @@ func Run(logger *log.Logger, appConfig *config.AppConfig) error {
 		}
 	}
 
-	handler := NewHandler(logger, appConfig)
+	handler := NewHandler(logger, appConfig, services)
 	return http.ListenAndServe(addr, handler)
 }
