@@ -4,7 +4,10 @@ services:
       dockerfile: "Dockerfile"
       target: "local"
     ports:
-      - "127.0.0.1:${PORT}:8080"
+      - "127.0.0.1:${PORT:-8080}:8080"
+    environment:
+      # Keep the process listen port aligned with the compose target port.
+      PORT: "8080"
     volumes:
       - type: bind
         source: .
@@ -13,7 +16,7 @@ services:
         source: ${CACHE_DIR}
         target: /root/.cache/go-build
     env_file: ".env"
-        
+
   lint:
     image: golangci/golangci-lint:v1
     command: "golangci-lint run -v"
@@ -29,5 +32,7 @@ services:
       dockerfile: "Dockerfile"
       target: "deploy"
     ports:
-      - "127.0.0.1:${PORT}:8080"
+      - "127.0.0.1:${PORT:-8080}:8080"
+    environment:
+      PORT: "8080"
     env_file: ".env"
