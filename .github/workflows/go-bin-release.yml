@@ -31,4 +31,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          ldflags: "-X main.Version=${{ github.ref_name }} -X main.Commit=${{ github.sha }}"
+          ldflags: "-X main.Version=${{ github.ref_name }} -X main.Commit=${{ github.sha }} -X main.DisplayName=intern-auth-gateway -X main.ShortName=intern-auth-gateway"

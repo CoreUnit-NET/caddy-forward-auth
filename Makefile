@@ -31,7 +31,7 @@ endif
 
 .DEFAULT_GOAL = info
 PROJECT_SHORT_NAME ?= $(PROJECT_DISPLAY_NAME)
-PROJECT_SHORT_NAME := $(shell echo $(PROJECT_SHORT_NAME) | sed 's/ //g' | sed 's/-//g' | tr '[:upper:]' '[:lower:]')
+PROJECT_SHORT_NAME := $(shell echo $(PROJECT_SHORT_NAME) | sed 's/ //g' | tr '[:upper:]' '[:lower:]')
 PROJECT_COMMIT_SHORT := $(shell git rev-parse --is-inside-work-tree > /dev/null 2>&1 && git rev-parse --verify HEAD > /dev/null 2>&1 && (commit=$$(git rev-parse --short HEAD); status=$$(git status -s); if [ -n "$$status" ]; then echo $$commit-modified; else echo $$commit; fi) || echo "no-commit")
 PROJECT_BUILD_ARGS ?= "$(PROJECT_EXTRA_BUILD_ARGS)-X main.Version=$(PROJECT_VERSION) -X main.Commit=$(PROJECT_COMMIT_SHORT) -X \"main.DisplayName=$(PROJECT_DISPLAY_NAME)\" -X main.ShortName=$(PROJECT_SHORT_NAME)"
 PROJECT_BUILDALL_OS ?= linux darwin windows
