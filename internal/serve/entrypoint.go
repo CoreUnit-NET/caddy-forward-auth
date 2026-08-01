@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
@@ -45,6 +46,13 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 		}
 	}
 
-	handler := NewHandler(logger, appConfig.Verbose, origins, services, shortName)
-	return http.ListenAndServe(addr, handler)
+	server := &http.Server{
+		Addr:              addr,
+		Handler:           NewHandler(logger, appConfig.Verbose, origins, services, shortName),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+	return server.ListenAndServe()
 }
