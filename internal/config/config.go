@@ -11,7 +11,6 @@ import (
 type AppConfig struct {
 	Verbose     bool
 	ShowVersion bool
-	Args        []string
 	Subcommand  string
 
 	Host           string
@@ -23,7 +22,6 @@ func defaultAppConfig() *AppConfig {
 	return &AppConfig{
 		Verbose:     false,
 		ShowVersion: false,
-		Args:        []string{},
 
 		Host:           "0.0.0.0",
 		Port:           8080,
@@ -36,7 +34,6 @@ func versionCommand(appConfig *AppConfig) *cobra.Command {
 		Use:   "version",
 		Short: "Prints version message",
 		Run: func(cmd *cobra.Command, args []string) {
-			appConfig.Args = args
 			appConfig.ShowVersion = true
 		},
 	}
@@ -47,25 +44,33 @@ func serveCommand(appConfig *AppConfig) *cobra.Command {
 		Use:   "serve",
 		Short: "Start the HTTP server",
 		Run: func(cmd *cobra.Command, args []string) {
-			appConfig.Args = args
 			appConfig.Subcommand = "serve"
 		},
 	}
 }
 
-func loadEnvVars(appConfig *AppConfig) {
-	EnvIsBool("VERBOSE", func(value bool) {
+func loadEnvVars(appConfig *AppConfig) error {
+	if err := EnvIsBool("VERBOSE", func(value bool) {
 		appConfig.Verbose = value
-	})
-	EnvIsString("HOST", func(value string) {
+	}); err != nil {
+		return err
+	}
+	if err := EnvIsString("HOST", func(value string) {
 		appConfig.Host = value
-	})
-	EnvIsInt("PORT", func(value int) {
+	}); err != nil {
+		return err
+	}
+	if err := EnvIsInt("PORT", func(value int) {
 		appConfig.Port = value
-	})
-	EnvIsString("ALLOWED_ORIGINS", func(value string) {
+	}); err != nil {
+		return err
+	}
+	if err := EnvIsString("ALLOWED_ORIGINS", func(value string) {
 		appConfig.AllowedOrigins = value
-	})
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func applyServeFlags(appConfig *AppConfig, cmd *cobra.Command) {
@@ -91,7 +96,6 @@ func ParseConfig(
 			"Running without a subcommand starts the HTTP server (same as '" + shortName + " serve').\n" +
 			"For more help, visit https://github.com/NobleMajo/intern-auth-gateway",
 		Run: func(cmd *cobra.Command, args []string) {
-			appConfig.Args = args
 			appConfig.Subcommand = "serve"
 		},
 	}
@@ -101,7 +105,10 @@ func ParseConfig(
 
 	applyServeFlags(appConfig, rootCmd)
 
-	loadEnvVars(appConfig)
+	if err := loadEnvVars(appConfig); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 
 	rootCmd.AddCommand(
 		versionCommand(appConfig),

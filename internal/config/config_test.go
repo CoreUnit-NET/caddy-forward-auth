@@ -81,6 +81,30 @@ func TestParseConfigFlagsAndEnv(t *testing.T) {
 	}
 }
 
+func TestParseConfigInvalidPortExits(t *testing.T) {
+	if os.Getenv("TEST_INVALID_PORT_EXIT") == "1" {
+		os.Args = []string{"intern-auth-gateway", "serve"}
+		_ = ParseConfig("Demo", "demo", "1.0.0", "abc")
+		return
+	}
+
+	cmd := exec.Command(os.Args[0], "-test.run=TestParseConfigInvalidPortExits", "-test.v")
+	cmd.Env = append(os.Environ(),
+		"TEST_INVALID_PORT_EXIT=1",
+		"PORT=nope",
+		"VERBOSE=",
+		"HOST=",
+		"ALLOWED_ORIGINS=",
+	)
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("expected non-zero exit, output: %s", out)
+	}
+	if !strings.Contains(string(out), "PORT") {
+		t.Fatalf("expected PORT in output, got: %s", out)
+	}
+}
+
 func TestParseConfigVersionFlag(t *testing.T) {
 	if os.Getenv("TEST_VERSION_EXIT") == "1" {
 		os.Args = []string{"intern-auth-gateway", "--version"}
