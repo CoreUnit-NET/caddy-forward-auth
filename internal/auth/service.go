@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 const serviceEnvPrefix = "SERVICE_"
@@ -16,8 +18,8 @@ type ServiceCred struct {
 }
 
 // LoadServicesFromEnv scans SERVICE_* environment variables, parses each value as
-// hostGlob/username/passwordHash (SplitN; hash may contain '/'), and rejects
-// duplicate usernames across services.
+// hostGlob/username/passwordHash (SplitN; hash may contain '/'), validates bcrypt
+// hashes, rejects duplicate usernames, and requires at least one service.
 func LoadServicesFromEnv() (map[string]ServiceCred, error) {
 	services := make(map[string]ServiceCred)
 	usernames := make(map[string]string) // username -> service name
@@ -38,6 +40,9 @@ func LoadServicesFromEnv() (map[string]ServiceCred, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := validatePasswordHash(key, cred.PasswordHash); err != nil {
+			return nil, err
+		}
 		if other, exists := usernames[cred.Username]; exists {
 			return nil, fmt.Errorf(
 				"duplicate username %q in %s and SERVICE_%s",
@@ -49,7 +54,17 @@ func LoadServicesFromEnv() (map[string]ServiceCred, error) {
 		usernames[cred.Username] = name
 		services[name] = cred
 	}
+	if len(services) == 0 {
+		return nil, fmt.Errorf("no SERVICE_* entries configured")
+	}
 	return services, nil
+}
+
+func validatePasswordHash(envKey, hash string) error {
+	if _, err := bcrypt.Cost([]byte(hash)); err != nil {
+		return fmt.Errorf("invalid %s passwordHash: %w", envKey, err)
+	}
+	return nil
 }
 
 func parseServiceValue(envKey, value string) (ServiceCred, error) {
