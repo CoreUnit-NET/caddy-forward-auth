@@ -1,8 +1,8 @@
 package config
 
 import (
+	"errors"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 )
@@ -22,7 +22,10 @@ func TestParseConfigDefaults(t *testing.T) {
 	clearConfigEnv(t)
 
 	os.Args = []string{"intern-auth-gateway", "serve"}
-	cfg := ParseConfig("Demo", "demo", "1.0.0", "abc")
+	cfg, err := ParseConfig("Demo", "demo")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
 
 	if cfg.Verbose {
 		t.Fatal("expected Verbose false by default")
@@ -47,7 +50,10 @@ func TestParseConfigBareRootDefaultsToServe(t *testing.T) {
 	clearConfigEnv(t)
 
 	os.Args = []string{"intern-auth-gateway"}
-	cfg := ParseConfig("Demo", "demo", "1.0.0", "abc")
+	cfg, err := ParseConfig("Demo", "demo")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
 	if cfg.Subcommand != "serve" {
 		t.Fatalf("Subcommand = %q, want serve", cfg.Subcommand)
 	}
@@ -64,7 +70,10 @@ func TestParseConfigFlagsAndEnv(t *testing.T) {
 	t.Setenv("VERBOSE", "true")
 
 	os.Args = []string{"intern-auth-gateway", "serve", "--host", "10.0.0.1", "--port", "8081"}
-	cfg := ParseConfig("Demo", "demo", "1.0.0", "abc")
+	cfg, err := ParseConfig("Demo", "demo")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
 
 	if !cfg.Verbose {
 		t.Fatal("expected Verbose true from env")
@@ -81,44 +90,45 @@ func TestParseConfigFlagsAndEnv(t *testing.T) {
 	}
 }
 
-func TestParseConfigInvalidPortExits(t *testing.T) {
-	if os.Getenv("TEST_INVALID_PORT_EXIT") == "1" {
-		os.Args = []string{"intern-auth-gateway", "serve"}
-		_ = ParseConfig("Demo", "demo", "1.0.0", "abc")
-		return
-	}
+func TestParseConfigInvalidPort(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	clearConfigEnv(t)
 
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseConfigInvalidPortExits", "-test.v")
-	cmd.Env = append(os.Environ(),
-		"TEST_INVALID_PORT_EXIT=1",
-		"PORT=nope",
-		"VERBOSE=",
-		"HOST=",
-		"ALLOWED_ORIGINS=",
-	)
-	out, err := cmd.CombinedOutput()
+	t.Setenv("PORT", "nope")
+	os.Args = []string{"intern-auth-gateway", "serve"}
+	_, err := ParseConfig("Demo", "demo")
 	if err == nil {
-		t.Fatalf("expected non-zero exit, output: %s", out)
+		t.Fatal("expected error for invalid PORT")
 	}
-	if !strings.Contains(string(out), "PORT") {
-		t.Fatalf("expected PORT in output, got: %s", out)
+	if !strings.Contains(err.Error(), "PORT") {
+		t.Fatalf("expected PORT in error, got: %v", err)
 	}
 }
 
 func TestParseConfigVersionFlag(t *testing.T) {
-	if os.Getenv("TEST_VERSION_EXIT") == "1" {
-		os.Args = []string{"intern-auth-gateway", "--version"}
-		_ = ParseConfig("Demo", "demo", "1.2.3", "deadbeef")
-		return
-	}
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	clearConfigEnv(t)
 
-	cmd := exec.Command(os.Args[0], "-test.run=TestParseConfigVersionFlag", "-test.v")
-	cmd.Env = append(os.Environ(), "TEST_VERSION_EXIT=1")
-	out, err := cmd.CombinedOutput()
+	os.Args = []string{"intern-auth-gateway", "--version"}
+	cfg, err := ParseConfig("Demo", "demo")
 	if err != nil {
-		t.Fatalf("unexpected error: %v\n%s", err, out)
+		t.Fatalf("ParseConfig: %v", err)
 	}
-	if !strings.Contains(string(out), "Demo version 1.2.3, build deadbeef") {
-		t.Fatalf("unexpected version output: %s", out)
+	if !cfg.ShowVersion {
+		t.Fatal("expected ShowVersion true")
+	}
+}
+
+func TestParseConfigHelpRequested(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	clearConfigEnv(t)
+
+	os.Args = []string{"intern-auth-gateway", "--help"}
+	_, err := ParseConfig("Demo", "demo")
+	if !errors.Is(err, ErrHelpRequested) {
+		t.Fatalf("err = %v, want ErrHelpRequested", err)
 	}
 }

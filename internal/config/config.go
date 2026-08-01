@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const helpURL = "https://github.com/CoreUnit-NET/intern-auth-gateway"
+
 type AppConfig struct {
 	Verbose     bool
 	ShowVersion bool
@@ -50,22 +52,22 @@ func serveCommand(appConfig *AppConfig) *cobra.Command {
 }
 
 func loadEnvVars(appConfig *AppConfig) error {
-	if err := EnvIsBool("VERBOSE", func(value bool) {
+	if err := envIsBool("VERBOSE", func(value bool) {
 		appConfig.Verbose = value
 	}); err != nil {
 		return err
 	}
-	if err := EnvIsString("HOST", func(value string) {
+	if err := envIsString("HOST", func(value string) {
 		appConfig.Host = value
 	}); err != nil {
 		return err
 	}
-	if err := EnvIsInt("PORT", func(value int) {
+	if err := envIsInt("PORT", func(value int) {
 		appConfig.Port = value
 	}); err != nil {
 		return err
 	}
-	if err := EnvIsString("ALLOWED_ORIGINS", func(value string) {
+	if err := envIsString("ALLOWED_ORIGINS", func(value string) {
 		appConfig.AllowedOrigins = value
 	}); err != nil {
 		return err
@@ -80,21 +82,19 @@ func applyServeFlags(appConfig *AppConfig, cmd *cobra.Command) {
 	cmd.PersistentFlags().StringVar(&appConfig.AllowedOrigins, "allowed-origins", appConfig.AllowedOrigins, "CSV of allowed Origin hostnames (ALLOWED_ORIGINS)")
 }
 
-func ParseConfig(
-	displayName string,
-	shortName string,
-	version string,
-	commit string,
-) *AppConfig {
+// ParseConfig loads env defaults, parses CLI flags/subcommands, and returns the app config.
+// It returns ErrHelpRequested when the user asked for help (cobra has already printed it).
+// Callers should handle ShowVersion and process exit themselves.
+func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 	appConfig := defaultAppConfig()
 
+	short := displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
+		"For more help, visit " + helpURL
 	rootCmd := &cobra.Command{
-		Use: shortName,
-		Short: displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
-			"For more help, visit https://github.com/CoreUnit-NET/intern-auth-gateway",
-		Long: displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
-			"Running without a subcommand starts the HTTP server (same as '" + shortName + " serve').\n" +
-			"For more help, visit https://github.com/CoreUnit-NET/intern-auth-gateway",
+		Use:   shortName,
+		Short: short,
+		Long: short + "\n" +
+			"Running without a subcommand starts the HTTP server (same as '" + shortName + " serve').",
 		Run: func(cmd *cobra.Command, args []string) {
 			appConfig.Subcommand = "serve"
 		},
@@ -106,8 +106,7 @@ func ParseConfig(
 	applyServeFlags(appConfig, rootCmd)
 
 	if err := loadEnvVars(appConfig); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	rootCmd.AddCommand(
@@ -123,28 +122,22 @@ func ParseConfig(
 
 	cmd, err := rootCmd.ExecuteC()
 	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
+		return nil, err
 	}
 
 	if commandHelpRequested(cmd) {
-		os.Exit(0)
+		return nil, ErrHelpRequested
 	}
 
 	if appConfig.Verbose {
 		fmt.Fprintln(os.Stderr, "Verbose mode enabled")
 	}
 
-	if appConfig.ShowVersion {
-		fmt.Println(displayName + " version " + version + ", build " + commit)
-		os.Exit(0)
-	}
-
 	if appConfig.Subcommand == "" {
 		appConfig.Subcommand = "serve"
 	}
 
-	return appConfig
+	return appConfig, nil
 }
 
 func commandHelpRequested(cmd *cobra.Command) bool {

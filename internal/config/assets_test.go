@@ -6,7 +6,7 @@ func TestEnvIsString(t *testing.T) {
 	t.Run("set", func(t *testing.T) {
 		t.Setenv("TEST_STRING", "hello")
 		var got string
-		if err := EnvIsString("TEST_STRING", func(value string) {
+		if err := envIsString("TEST_STRING", func(value string) {
 			got = value
 		}); err != nil {
 			t.Fatalf("unexpected error: %v", err)
@@ -19,7 +19,7 @@ func TestEnvIsString(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		t.Setenv("TEST_STRING", "")
 		called := false
-		if err := EnvIsString("TEST_STRING", func(string) { called = true }); err != nil {
+		if err := envIsString("TEST_STRING", func(string) { called = true }); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if called {
@@ -32,7 +32,7 @@ func TestEnvIsInt(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		t.Setenv("TEST_INT", "42")
 		var got int
-		if err := EnvIsInt("TEST_INT", func(value int) { got = value }); err != nil {
+		if err := envIsInt("TEST_INT", func(value int) { got = value }); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if got != 42 {
@@ -43,7 +43,7 @@ func TestEnvIsInt(t *testing.T) {
 	t.Run("invalid", func(t *testing.T) {
 		t.Setenv("TEST_INT", "nope")
 		called := false
-		err := EnvIsInt("TEST_INT", func(int) { called = true })
+		err := envIsInt("TEST_INT", func(int) { called = true })
 		if err == nil {
 			t.Fatal("expected error for invalid int")
 		}
@@ -55,7 +55,7 @@ func TestEnvIsInt(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		t.Setenv("TEST_INT", "")
 		called := false
-		if err := EnvIsInt("TEST_INT", func(int) { called = true }); err != nil {
+		if err := envIsInt("TEST_INT", func(int) { called = true }); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if called {
@@ -68,7 +68,7 @@ func TestEnvIsBool(t *testing.T) {
 	t.Run("valid", func(t *testing.T) {
 		t.Setenv("TEST_BOOL", "true")
 		var got bool
-		if err := EnvIsBool("TEST_BOOL", func(value bool) { got = value }); err != nil {
+		if err := envIsBool("TEST_BOOL", func(value bool) { got = value }); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if !got {
@@ -79,7 +79,7 @@ func TestEnvIsBool(t *testing.T) {
 	t.Run("invalid", func(t *testing.T) {
 		t.Setenv("TEST_BOOL", "maybe")
 		called := false
-		err := EnvIsBool("TEST_BOOL", func(bool) { called = true })
+		err := envIsBool("TEST_BOOL", func(bool) { called = true })
 		if err == nil {
 			t.Fatal("expected error for invalid bool")
 		}
@@ -91,7 +91,7 @@ func TestEnvIsBool(t *testing.T) {
 	t.Run("empty", func(t *testing.T) {
 		t.Setenv("TEST_BOOL", "")
 		called := false
-		if err := EnvIsBool("TEST_BOOL", func(bool) { called = true }); err != nil {
+		if err := envIsBool("TEST_BOOL", func(bool) { called = true }); err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if called {

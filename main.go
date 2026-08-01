@@ -22,17 +22,20 @@ func main() {
 	}
 
 	logger := log.New(os.Stdout, "", log.LstdFlags)
-	appConfig := config.ParseConfig(DisplayName, ShortName, Version, Commit)
-
-	var err error
-	if appConfig.Subcommand == "serve" {
-		err = serve.Run(logger, ShortName, appConfig)
-	} else {
-		fmt.Fprintf(os.Stderr, "%s: '%s' is not a command.\nSee '%s --help'\n", os.Args[0], appConfig.Subcommand, os.Args[0])
+	appConfig, err := config.ParseConfig(DisplayName, ShortName)
+	if errors.Is(err, config.ErrHelpRequested) {
+		os.Exit(0)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+	if appConfig.ShowVersion {
+		fmt.Println(DisplayName + " version " + Version + ", build " + Commit)
+		os.Exit(0)
+	}
 
-	if err != nil {
+	if err := serve.Run(logger, ShortName, appConfig); err != nil {
 		log.Fatalf("error: %v", err)
 	}
 }

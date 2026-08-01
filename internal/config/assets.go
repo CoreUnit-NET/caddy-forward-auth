@@ -1,12 +1,13 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
 )
 
-func EnvIsString(envVar string, existCallback func(value string)) error {
+func envIsString(envVar string, existCallback func(value string)) error {
 	value := os.Getenv(envVar)
 	if len(value) == 0 {
 		return nil
@@ -16,7 +17,7 @@ func EnvIsString(envVar string, existCallback func(value string)) error {
 	return nil
 }
 
-func EnvIsInt(envVar string, existCallback func(value int)) error {
+func envIsInt(envVar string, existCallback func(value int)) error {
 	value := os.Getenv(envVar)
 	if len(value) == 0 {
 		return nil
@@ -31,7 +32,7 @@ func EnvIsInt(envVar string, existCallback func(value int)) error {
 	return nil
 }
 
-func EnvIsBool(envVar string, existCallback func(value bool)) error {
+func envIsBool(envVar string, existCallback func(value bool)) error {
 	value := os.Getenv(envVar)
 	if len(value) == 0 {
 		return nil
@@ -45,3 +46,7 @@ func EnvIsBool(envVar string, existCallback func(value bool)) error {
 	existCallback(boolValue)
 	return nil
 }
+
+// ErrHelpRequested is returned when the user asked for command help.
+// Callers should exit successfully after cobra has printed help.
+var ErrHelpRequested = errors.New("help requested")
