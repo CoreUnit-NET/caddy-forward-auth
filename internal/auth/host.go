@@ -49,11 +49,7 @@ func HostGlobsOverlap(a, b string) bool {
 		return false
 	}
 	for i := range aParts {
-		ap, bp := aParts[i], bParts[i]
-		if ap == "*" || bp == "*" {
-			continue
-		}
-		if ap != bp {
+		if !labelsCompatible(aParts[i], bParts[i]) {
 			return false
 		}
 	}
@@ -93,19 +89,27 @@ func matchHostGlob(pattern, host string) bool {
 		return false
 	}
 	for i := range patternParts {
-		p := patternParts[i]
-		h := hostParts[i]
-		if p == "*" {
-			if h == "" {
-				return false
-			}
-			continue
-		}
-		if p != h {
+		if !labelMatch(patternParts[i], hostParts[i]) {
 			return false
 		}
 	}
 	return true
+}
+
+// labelMatch reports whether a pattern label matches a host label (* = one non-empty label).
+func labelMatch(patternLabel, hostLabel string) bool {
+	if patternLabel == "*" {
+		return hostLabel != ""
+	}
+	return patternLabel == hostLabel
+}
+
+// labelsCompatible reports whether two pattern labels can both match some host label.
+func labelsCompatible(a, b string) bool {
+	if a == "*" || b == "*" {
+		return true
+	}
+	return a == b
 }
 
 func normalizeHost(host string) string {
