@@ -3,7 +3,7 @@ package flood
 import (
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodtrack"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodtrack"
 )
 
 // RecordFailure appends a failed-auth event and updates punishments for ip.

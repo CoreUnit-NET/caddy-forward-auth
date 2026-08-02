@@ -24,5 +24,5 @@ bin
 tmp
 .tmp
 .env
-intern-auth-gateway.jsonc
+caddy-forward-auth.jsonc
 data

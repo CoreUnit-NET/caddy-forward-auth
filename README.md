@@ -1,13 +1,13 @@
-# intern-auth-gateway
+# caddy-forward-auth
 
-![CI/CD](https://github.com/CoreUnit-NET/intern-auth-gateway/actions/workflows/go-bin-release.yml/badge.svg)
-![CI/CD](https://github.com/CoreUnit-NET/intern-auth-gateway/actions/workflows/go-test-build.yml/badge.svg)  
+![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-bin-release.yml/badge.svg)
+![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-test-build.yml/badge.svg)  
 ![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
-![](https://img.shields.io/badge/dynamic/json?color=green&label=watchers&query=watchers&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fintern-auth-gateway)
-![](https://img.shields.io/badge/dynamic/json?color=yellow&label=stars&query=stargazers_count&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fintern-auth-gateway)
-![](https://img.shields.io/badge/dynamic/json?color=navy&label=forks&query=forks&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fintern-auth-gateway)
+![](https://img.shields.io/badge/dynamic/json?color=green&label=watchers&query=watchers&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
+![](https://img.shields.io/badge/dynamic/json?color=yellow&label=stars&query=stargazers_count&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
+![](https://img.shields.io/badge/dynamic/json?color=navy&label=forks&query=forks&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 
-intern-auth-gateway is a small HTTP auth service for Caddy `forward_auth`.
+caddy-forward-auth is a small HTTP auth service for Caddy `forward_auth`.
 It verifies HTTP Basic credentials against per-service bcrypt hashes and only then lets Caddy allow access to the protected upstream hosts.
 After a successful login it can temporarily whitelist the client IP so browsers do not need to resend Basic auth on every request.
 
@@ -103,17 +103,17 @@ Additional commands: `serve`, `version` (also `-v` / `--version`).
 
 ### Flags and environment
 
-| Flag                | Env Var           | Type | Default   | Description |
-| ------------------- | ----------------- | ---- | --------- | ----------- |
-| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup |
-| `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address |
-| `--port`            | `PORT`            | int  | `8080`    | Listen port |
+| Flag                | Env Var           | Type | Default   | Description                                                                                                    |
+| ------------------- | ----------------- | ---- | --------- | -------------------------------------------------------------------------------------------------------------- |
+| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup                              |
+| `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address                                                                                                 |
+| `--port`            | `PORT`            | int  | `8080`    | Listen port                                                                                                    |
 | `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames. When set, other origins are rejected with `403`. Empty disables origin enforcement |
 
 Quick help:
 
 ```sh
-go run github.com/CoreUnit-NET/intern-auth-gateway@latest -h
+go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
 ```
 
 ### Services
@@ -121,15 +121,15 @@ go run github.com/CoreUnit-NET/intern-auth-gateway@latest -h
 Services are configured **only through environment variables** with the `SERVICE_` prefix.  
 At least one valid `SERVICE_*` entry is required or startup fails.
 
-| Piece | Rule |
-| ----- | ---- |
-| Env key | `SERVICE_<name>` (name must be non-empty) |
-| Value | `hostGlob/username/passwordHash` |
-| Parsing | Split on `/` with at most **two** separators (`SplitN`); the bcrypt hash may contain `/` |
-| `hostGlob` | Exact hostname, single-label `*` (for example `*.intern.example.com`), or bare `*` for any host |
-| `username` | Must be **unique** across all `SERVICE_*` entries (startup fails on duplicates) |
-| `passwordHash` | Valid bcrypt hash (startup fails on invalid hashes) |
-| Overlapping globs | Allowed; startup logs a warning when two `SERVICE_*` host globs can match the same host |
+| Piece             | Rule                                                                                            |
+| ----------------- | ----------------------------------------------------------------------------------------------- |
+| Env key           | `SERVICE_<name>` (name must be non-empty)                                                       |
+| Value             | `hostGlob/username/passwordHash`                                                                |
+| Parsing           | Split on `/` with at most **two** separators (`SplitN`); the bcrypt hash may contain `/`        |
+| `hostGlob`        | Exact hostname, single-label `*` (for example `*.intern.example.com`), or bare `*` for any host |
+| `username`        | Must be **unique** across all `SERVICE_*` entries (startup fails on duplicates)                 |
+| `passwordHash`    | Valid bcrypt hash (startup fails on invalid hashes)                                             |
+| Overlapping globs | Allowed; startup logs a warning when two `SERVICE_*` host globs can match the same host         |
 
 Example:
 
@@ -149,20 +149,20 @@ See `sample.env` for a copy-paste template.
 
 Linux- or macos-like systems with:
 
-- `go` **or** `wget` & `tar` (to run/install the intern-auth-gateway binary)
+- `go` **or** `wget` & `tar` (to run/install the caddy-forward-auth binary)
 
 ### Use via Go
 
 Help and configuration details:
 
 ```sh
-go run github.com/CoreUnit-NET/intern-auth-gateway@latest -h
+go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
 ```
 
 Start with defaults (same as `serve`):
 
 ```sh
-go run github.com/CoreUnit-NET/intern-auth-gateway@latest
+go run github.com/CoreUnit-NET/caddy-forward-auth@latest
 ```
 
 ### Install via go
@@ -170,19 +170,19 @@ go run github.com/CoreUnit-NET/intern-auth-gateway@latest
 ###### _For this section go is required, check out the [install go guide](#install-go)._
 
 ```sh
-go install github.com/CoreUnit-NET/intern-auth-gateway@latest
+go install github.com/CoreUnit-NET/caddy-forward-auth@latest
 ```
 
 ### Install via GitHub release
 
-1. Open the [GitHub Releases](https://github.com/CoreUnit-NET/intern-auth-gateway/releases) page.
-2. Download the archive for your OS/arch (release assets are produced as `intern-auth-gateway_<os>_<arch>.tar.gz`, for example `intern-auth-gateway_linux_amd64.tar.gz`).
-3. Extract the `intern-auth-gateway` binary into your preferred bin directory:
+1. Open the [GitHub Releases](https://github.com/CoreUnit-NET/caddy-forward-auth/releases) page.
+2. Download the archive for your OS/arch (release assets are produced as `caddy-forward-auth_<os>_<arch>.tar.gz`, for example `caddy-forward-auth_linux_amd64.tar.gz`).
+3. Extract the `caddy-forward-auth` binary into your preferred bin directory:
 
 ```sh
 export CUSTOM_BIN_DIR="/usr/local/bin" # <- change if needed
-tar -xzvf intern-auth-gateway_linux_amd64.tar.gz -C "$CUSTOM_BIN_DIR" intern-auth-gateway
-chmod +x "$CUSTOM_BIN_DIR/intern-auth-gateway"
+tar -xzvf caddy-forward-auth_linux_amd64.tar.gz -C "$CUSTOM_BIN_DIR" caddy-forward-auth
+chmod +x "$CUSTOM_BIN_DIR/caddy-forward-auth"
 ```
 
 # Build
@@ -199,8 +199,8 @@ The required go version is in the `go.mod` file.
 Clone the repo:
 
 ```sh
-git clone https://github.com/CoreUnit-NET/intern-auth-gateway.git
-cd intern-auth-gateway
+git clone https://github.com/CoreUnit-NET/caddy-forward-auth.git
+cd caddy-forward-auth
 ```
 
 Build the binary from source (`make build` writes `./bin`):

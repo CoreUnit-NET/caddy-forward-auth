@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodtrack"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodtrack"
 )
 
 // ErrCleanupRunning is returned when StartCleanup is called while a cleanup

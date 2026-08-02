@@ -8,7 +8,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const helpURL = "https://github.com/CoreUnit-NET/intern-auth-gateway"
+const helpURL = "https://github.com/CoreUnit-NET/caddy-forward-auth"
 
 type AppConfig struct {
 	Verbose     bool

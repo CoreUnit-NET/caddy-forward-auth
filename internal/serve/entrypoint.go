@@ -11,10 +11,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/flood"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/ipwhitelist"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/auth"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/config"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/flood"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
 )
 
 // Run starts the HTTP server for caddy forward_auth probes.

@@ -25,10 +25,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: wangyoucao577/go-release-action@v1
         with:
-          binary_name: "intern-auth-gateway"
+          binary_name: "caddy-forward-auth"
           goversion: "1.25"
           extra_files: LICENSE README.md CONTRIBUTING.md
           github_token: ${{ secrets.GITHUB_TOKEN }}
           goos: ${{ matrix.goos }}
           goarch: ${{ matrix.goarch }}
-          ldflags: "-X main.Version=${{ github.ref_name }} -X main.Commit=${{ github.sha }} -X main.DisplayName=intern-auth-gateway -X main.ShortName=intern-auth-gateway"
+          ldflags: "-X main.Version=${{ github.ref_name }} -X main.Commit=${{ github.sha }} -X main.DisplayName=caddy-forward-auth -X main.ShortName=caddy-forward-auth"

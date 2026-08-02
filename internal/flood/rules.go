@@ -3,7 +3,7 @@ package flood
 import (
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodban"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodban"
 )
 
 // punishmentRule is one flood threshold that may introduce a ban.

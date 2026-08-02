@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/flood"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/ipwhitelist"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/auth"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/flood"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
 )
 
 // NewHandler builds the HTTP handler used for caddy forward_auth probes.

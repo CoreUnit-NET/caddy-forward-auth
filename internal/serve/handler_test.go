@@ -14,10 +14,10 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/flood"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodban"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/ipwhitelist"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/auth"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/flood"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodban"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
 )
 
 func testLogger(t *testing.T) *log.Logger {

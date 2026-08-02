@@ -21,7 +21,7 @@ func TestParseConfigDefaults(t *testing.T) {
 	t.Cleanup(func() { os.Args = oldArgs })
 	clearConfigEnv(t)
 
-	os.Args = []string{"intern-auth-gateway", "serve"}
+	os.Args = []string{"caddy-forward-auth", "serve"}
 	cfg, err := ParseConfig("Demo", "demo")
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
@@ -46,7 +46,7 @@ func TestParseConfigBareRootStartsServer(t *testing.T) {
 	t.Cleanup(func() { os.Args = oldArgs })
 	clearConfigEnv(t)
 
-	os.Args = []string{"intern-auth-gateway"}
+	os.Args = []string{"caddy-forward-auth"}
 	cfg, err := ParseConfig("Demo", "demo")
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
@@ -69,7 +69,7 @@ func TestParseConfigFlagsAndEnv(t *testing.T) {
 	t.Setenv("ALLOWED_ORIGINS", "a.example.com, b.example.com")
 	t.Setenv("VERBOSE", "true")
 
-	os.Args = []string{"intern-auth-gateway", "serve", "--host", "10.0.0.1", "--port", "8081"}
+	os.Args = []string{"caddy-forward-auth", "serve", "--host", "10.0.0.1", "--port", "8081"}
 	cfg, err := ParseConfig("Demo", "demo")
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
@@ -96,7 +96,7 @@ func TestParseConfigInvalidPort(t *testing.T) {
 	clearConfigEnv(t)
 
 	t.Setenv("PORT", "nope")
-	os.Args = []string{"intern-auth-gateway", "serve"}
+	os.Args = []string{"caddy-forward-auth", "serve"}
 	_, err := ParseConfig("Demo", "demo")
 	if err == nil {
 		t.Fatal("expected error for invalid PORT")
@@ -111,7 +111,7 @@ func TestParseConfigVersionFlag(t *testing.T) {
 	t.Cleanup(func() { os.Args = oldArgs })
 	clearConfigEnv(t)
 
-	os.Args = []string{"intern-auth-gateway", "--version"}
+	os.Args = []string{"caddy-forward-auth", "--version"}
 	cfg, err := ParseConfig("Demo", "demo")
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
@@ -126,7 +126,7 @@ func TestParseConfigHelpRequested(t *testing.T) {
 	t.Cleanup(func() { os.Args = oldArgs })
 	clearConfigEnv(t)
 
-	os.Args = []string{"intern-auth-gateway", "--help"}
+	os.Args = []string{"caddy-forward-auth", "--help"}
 	_, err := ParseConfig("Demo", "demo")
 	if !errors.Is(err, ErrHelpRequested) {
 		t.Fatalf("err = %v, want ErrHelpRequested", err)

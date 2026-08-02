@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/persist"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/persist"
 )
 
 // ErrPeriodicSaveRunning is returned when StartPeriodicSave is called while a

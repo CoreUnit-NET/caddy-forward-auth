@@ -277,7 +277,7 @@ docker: ##@ runs a shell in the container
 		local
 
 .PHONY: docker/run
-docker/run: ##@ runs intern-auth-gateway in docker via air (mounted source)
+docker/run: ##@ runs caddy-forward-auth in docker via air (mounted source)
 	@docker rm -f dev-$(PROJECT_SHORT_NAME)-run > /dev/null 2>&1 || true
 	docker compose run --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME)-run \

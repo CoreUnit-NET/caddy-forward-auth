@@ -1,4 +1,4 @@
-module github.com/CoreUnit-NET/intern-auth-gateway
+module github.com/CoreUnit-NET/caddy-forward-auth
 
 go 1.25.0
 

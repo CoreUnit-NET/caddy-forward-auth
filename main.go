@@ -6,8 +6,8 @@ import (
 	"log"
 	"os"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/serve"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/config"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/serve"
 	"github.com/joho/godotenv"
 )
 

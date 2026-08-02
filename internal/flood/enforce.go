@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodban"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodban"
 )
 
 // ClientIP resolves the remote client address for flood tracking.
