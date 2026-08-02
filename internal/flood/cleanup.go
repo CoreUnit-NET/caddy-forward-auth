@@ -2,8 +2,6 @@ package flood
 
 import (
 	"errors"
-	"log"
-	"sync"
 	"time"
 
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/floodtrack"
@@ -16,8 +14,6 @@ var ErrCleanupRunning = errors.New("flood: cleanup already running")
 // ErrCleanupNotRunning is returned when StopCleanup is called while no cleanup
 // loop is active.
 var ErrCleanupNotRunning = errors.New("flood: cleanup not running")
-
-var cleanupMu sync.Mutex // guards Engine cleanup fields across engines? per-engine below.
 
 // Cleanup removes flood entries older than floodtrack.DefaultRetention and
 // expired temporary bans. It marks bundles dirty when something changes.
@@ -46,8 +42,8 @@ func (e *Engine) StartCleanup(interval time.Duration) error {
 	if interval <= 0 {
 		interval = DefaultCleanupInterval
 	}
-	cleanupMu.Lock()
-	defer cleanupMu.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if e.cleanupRunning {
 		return ErrCleanupRunning
 	}
@@ -66,20 +62,20 @@ func (e *Engine) StopCleanup() error {
 	if e == nil {
 		return errors.New("flood: nil engine")
 	}
-	cleanupMu.Lock()
+	e.mu.Lock()
 	if !e.cleanupRunning {
-		cleanupMu.Unlock()
+		e.mu.Unlock()
 		return ErrCleanupNotRunning
 	}
 	stopCh := e.cleanupStopCh
 	doneCh := e.cleanupDoneCh
-	cleanupMu.Unlock()
+	e.mu.Unlock()
 
 	close(stopCh)
 	<-doneCh
 
-	cleanupMu.Lock()
-	defer cleanupMu.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	e.cleanupRunning = false
 	e.cleanupStopCh = nil
 	e.cleanupDoneCh = nil
@@ -91,8 +87,8 @@ func (e *Engine) CleanupRunning() bool {
 	if e == nil {
 		return false
 	}
-	cleanupMu.Lock()
-	defer cleanupMu.Unlock()
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	return e.cleanupRunning
 }
 
@@ -106,7 +102,6 @@ func (e *Engine) cleanupLoop(interval time.Duration, stopCh, doneCh chan struct{
 			return
 		case <-ticker.C:
 			e.Cleanup(time.Now().UTC())
-			log.Printf("flood: cleanup tick complete")
 		}
 	}
 }
