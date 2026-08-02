@@ -9,6 +9,10 @@ const DefaultPath = "./data/ipwhitelist.json"
 // This is the temporary whitelist lifetime, not the periodic disk-save interval.
 const DefaultPeriod = 48 * time.Hour
 
+// DefaultSaveInterval is the default ticker period for StartPeriodicSave when
+// callers pass a non-positive interval.
+const DefaultSaveInterval = 30 * time.Second
+
 // Element is one temporary IP whitelist entry.
 // WhitelistTime is when the IP was added; it remains active for DefaultPeriod.
 type Element struct {

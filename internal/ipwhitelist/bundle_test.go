@@ -53,7 +53,7 @@ func TestOpenDefault(t *testing.T) {
 }
 
 func TestElementActiveDefaultPeriod(t *testing.T) {
-	start := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Truncate(time.Second)
 	el := Element{IP: "1.2.3.4", WhitelistTime: start}
 
 	if !el.ExpiresAt().Equal(start.Add(48 * time.Hour)) {
@@ -79,7 +79,7 @@ func TestContainsRespectsDefaultPeriod(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	start := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	start := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("10.0.0.2", start)
 
 	if !b.Contains("10.0.0.2", start.Add(time.Hour)) {
@@ -100,7 +100,7 @@ func TestUpsertRemoveClearDirtyWithoutImmediateSave(t *testing.T) {
 		t.Fatalf("Open: %v", err)
 	}
 
-	ts := time.Date(2026, 8, 2, 12, 0, 0, 0, time.UTC)
+	ts := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("1.2.3.4", ts)
 	if !b.IsDirty() {
 		t.Fatal("expected dirty after Upsert")
@@ -114,6 +114,10 @@ func TestUpsertRemoveClearDirtyWithoutImmediateSave(t *testing.T) {
 		t.Fatalf("unexpected elements: %#v", elems)
 	}
 
+	b.Upsert("1.2.3.4", ts) // already dirty; identical timestamp is a no-op for content
+	if !b.IsDirty() {
+		t.Fatal("expected still dirty after identical Upsert")
+	}
 	b.Upsert("1.2.3.4", ts.Add(time.Minute))
 	if len(b.Elements()) != 1 {
 		t.Fatalf("expected replace, got %#v", b.Elements())
@@ -139,6 +143,26 @@ func TestUpsertRemoveClearDirtyWithoutImmediateSave(t *testing.T) {
 	}
 }
 
+func TestUpsertSkipsDirtyWhenUnchanged(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "whitelist.json")
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	ts := time.Now().UTC().Truncate(time.Second)
+	b.Upsert("1.2.3.4", ts)
+	if err := b.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	if b.IsDirty() {
+		t.Fatal("expected clean after Save")
+	}
+	b.Upsert("1.2.3.4", ts)
+	if b.IsDirty() {
+		t.Fatal("identical Upsert must not mark dirty")
+	}
+}
+
 func TestSaveOnlyWhenDirty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "whitelist.json")
 	b, err := Open(path)
@@ -152,7 +176,7 @@ func TestSaveOnlyWhenDirty(t *testing.T) {
 		t.Fatal("clean Save must not create file")
 	}
 
-	ts := time.Date(2026, 8, 2, 13, 0, 0, 0, time.UTC)
+	ts := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("10.0.0.1", ts)
 	if err := b.Save(); err != nil {
 		t.Fatalf("Save dirty: %v", err)
@@ -178,13 +202,39 @@ func TestSaveOnlyWhenDirty(t *testing.T) {
 	}
 }
 
+func TestSavePrunesExpiredKeepsFuture(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "whitelist.json")
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	now := time.Now().UTC().Truncate(time.Second)
+	b.Upsert("10.0.0.1", now.Add(-DefaultPeriod-time.Hour)) // expired
+	b.Upsert("10.0.0.2", now)                               // active
+	b.Upsert("10.0.0.3", now.Add(time.Hour))                // not yet started
+	if err := b.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	elems := b.Elements()
+	if len(elems) != 2 {
+		t.Fatalf("want 2 kept elements, got %#v", elems)
+	}
+	ips := map[string]bool{}
+	for _, el := range elems {
+		ips[el.IP] = true
+	}
+	if ips["10.0.0.1"] || !ips["10.0.0.2"] || !ips["10.0.0.3"] {
+		t.Fatalf("unexpected kept ips: %#v", elems)
+	}
+}
+
 func TestOpenRoundTrip(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "whitelist.json")
 	b, err := Open(path)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	ts := time.Date(2026, 8, 2, 14, 0, 0, 0, time.UTC)
+	ts := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("2001:db8::1", ts)
 	if err := b.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -209,7 +259,7 @@ func TestMarshalJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	ts := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("127.0.0.1", ts)
 
 	raw, err := json.Marshal(b)
@@ -238,9 +288,6 @@ func TestPeriodicSaveDirtyOnlyAndSinglePeriod(t *testing.T) {
 	if err := b.StopPeriodicSave(); !errors.Is(err, ErrPeriodicSaveNotRunning) {
 		t.Fatalf("Stop: got %v, want ErrPeriodicSaveNotRunning", err)
 	}
-	if err := b.StartPeriodicSave(0); err == nil {
-		t.Fatal("expected error for non-positive interval")
-	}
 
 	if err := b.StartPeriodicSave(20 * time.Millisecond); err != nil {
 		t.Fatalf("StartPeriodicSave: %v", err)
@@ -258,7 +305,7 @@ func TestPeriodicSaveDirtyOnlyAndSinglePeriod(t *testing.T) {
 		t.Fatalf("expected no save while clean, stat err=%v", err)
 	}
 
-	ts := time.Date(2026, 8, 2, 15, 0, 0, 0, time.UTC)
+	ts := time.Now().UTC().Truncate(time.Second)
 	b.Upsert("8.8.8.8", ts)
 
 	deadline := time.Now().Add(500 * time.Millisecond)
@@ -292,6 +339,23 @@ func TestPeriodicSaveDirtyOnlyAndSinglePeriod(t *testing.T) {
 	}
 }
 
+func TestStartPeriodicSaveNonPositiveUsesDefault(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "whitelist.json")
+	b, err := Open(path)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := b.StartPeriodicSave(0); err != nil {
+		t.Fatalf("StartPeriodicSave(0): %v", err)
+	}
+	if !b.PeriodicSaveRunning() {
+		t.Fatal("expected running with default interval")
+	}
+	if err := b.StopPeriodicSave(); err != nil {
+		t.Fatalf("Stop: %v", err)
+	}
+}
+
 func TestStopPeriodicSaveFlushesDirty(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "whitelist.json")
 	b, err := Open(path)
@@ -302,7 +366,7 @@ func TestStopPeriodicSaveFlushesDirty(t *testing.T) {
 	if err := b.StartPeriodicSave(time.Hour); err != nil {
 		t.Fatalf("Start: %v", err)
 	}
-	b.Upsert("1.1.1.1", time.Date(2026, 8, 2, 16, 0, 0, 0, time.UTC))
+	b.Upsert("1.1.1.1", time.Now().UTC().Truncate(time.Second))
 	if err := b.StopPeriodicSave(); err != nil {
 		t.Fatalf("Stop: %v", err)
 	}

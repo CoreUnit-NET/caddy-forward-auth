@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -94,14 +95,17 @@ func (b *Bundle) IsDirty() bool {
 	return b.dirty
 }
 
-// Upsert adds or replaces an element for ip and marks the bundle dirty.
-// It does not write to disk. The entry stays active for DefaultPeriod
-// after whitelistTime (48h by default).
+// Upsert adds or replaces an element for ip and marks the bundle dirty when
+// the stored value changes. It does not write to disk. The entry stays active
+// for DefaultPeriod after whitelistTime (48h by default).
 func (b *Bundle) Upsert(ip string, whitelistTime time.Time) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for i := range b.elements {
 		if b.elements[i].IP == ip {
+			if b.elements[i].WhitelistTime.Equal(whitelistTime) {
+				return
+			}
 			b.elements[i].WhitelistTime = whitelistTime
 			b.dirty = true
 			return
@@ -157,29 +161,32 @@ func (b *Bundle) Clear() {
 	b.dirty = true
 }
 
-// MarshalJSON encodes the bundle elements as JSON.
+// MarshalJSON encodes the bundle elements as JSON (compact).
 func (b *Bundle) MarshalJSON() ([]byte, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return json.Marshal(bundleFile{Elements: b.elements})
+	return encodeBundle(b.elements, false)
 }
 
 // Save writes the bundle to disk when dirty. No-op (and nil error) if clean.
+// Expired entries are pruned before writing.
 func (b *Bundle) Save() error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	return b.saveLocked()
+	return b.saveLocked(time.Now().UTC())
 }
 
-func (b *Bundle) saveLocked() error {
+func (b *Bundle) saveLocked(now time.Time) error {
+	if b.pruneExpiredLocked(now) {
+		b.dirty = true
+	}
 	if !b.dirty {
 		return nil
 	}
-	data, err := json.MarshalIndent(bundleFile{Elements: b.elements}, "", "  ")
+	data, err := encodeBundle(b.elements, true)
 	if err != nil {
 		return fmt.Errorf("ipwhitelist: encode: %w", err)
 	}
-	data = append(data, '\n')
 
 	dir := filepath.Dir(b.path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -213,11 +220,61 @@ func (b *Bundle) saveLocked() error {
 	return nil
 }
 
+func (b *Bundle) pruneExpiredLocked(now time.Time) bool {
+	if len(b.elements) == 0 {
+		return false
+	}
+	kept := b.elements[:0]
+	removed := false
+	for _, el := range b.elements {
+		// Drop empty/invalid and entries whose whitelist window has ended.
+		// Keep not-yet-started entries (WhitelistTime in the future).
+		if el.IP == "" || el.WhitelistTime.IsZero() || !now.Before(el.ExpiresAt()) {
+			removed = true
+			continue
+		}
+		kept = append(kept, el)
+	}
+	if !removed {
+		return false
+	}
+	if len(kept) == 0 {
+		b.elements = nil
+	} else {
+		b.elements = kept
+	}
+	return true
+}
+
+func encodeBundle(elements []Element, indent bool) ([]byte, error) {
+	file := bundleFile{Elements: elements}
+	if elements == nil {
+		file.Elements = []Element{}
+	}
+	var (
+		data []byte
+		err  error
+	)
+	if indent {
+		data, err = json.MarshalIndent(file, "", "  ")
+	} else {
+		data, err = json.Marshal(file)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if indent {
+		data = append(data, '\n')
+	}
+	return data, nil
+}
+
 // StartPeriodicSave starts a single background loop that saves when dirty at
-// the given interval. Returns ErrPeriodicSaveRunning if already active.
+// the given interval. Non-positive interval uses DefaultSaveInterval.
+// Returns ErrPeriodicSaveRunning if already active.
 func (b *Bundle) StartPeriodicSave(interval time.Duration) error {
 	if interval <= 0 {
-		return fmt.Errorf("ipwhitelist: interval must be positive")
+		interval = DefaultSaveInterval
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -254,7 +311,7 @@ func (b *Bundle) StopPeriodicSave() error {
 	b.running = false
 	b.stopCh = nil
 	b.doneCh = nil
-	return b.saveLocked()
+	return b.saveLocked(time.Now().UTC())
 }
 
 // PeriodicSaveRunning reports whether the periodic saver is active.
@@ -273,7 +330,9 @@ func (b *Bundle) periodicSaveLoop(interval time.Duration, stopCh, doneCh chan st
 		case <-stopCh:
 			return
 		case <-ticker.C:
-			_ = b.Save()
+			if err := b.Save(); err != nil {
+				log.Printf("ipwhitelist: periodic save: %v", err)
+			}
 		}
 	}
 }
