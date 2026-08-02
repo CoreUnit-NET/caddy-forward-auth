@@ -23,7 +23,7 @@ func (e *Engine) UpdatePunishments(ip string, now time.Time) {
 			continue
 		}
 		candidate := banFromRule(ip, now, rule)
-		if harsherBan(candidate, best) {
+		if best.IP == "" || candidate.HarsherThan(best) {
 			best = candidate
 		}
 	}

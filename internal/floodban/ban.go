@@ -33,10 +33,10 @@ func (b Ban) Active(now time.Time) bool {
 	return !now.Before(b.BannedAt) && now.Before(b.ExpiresAt)
 }
 
-// harsherThan reports whether candidate is a stronger punishment than current.
+// HarsherThan reports whether candidate is a stronger punishment than current.
 // Permanent always wins. Otherwise the later ExpiresAt wins. Equal strength
 // returns false so callers can skip dirty writes.
-func (b Ban) harsherThan(current Ban) bool {
+func (b Ban) HarsherThan(current Ban) bool {
 	if b.Permanent {
 		return !current.Permanent
 	}

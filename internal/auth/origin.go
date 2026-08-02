@@ -32,16 +32,6 @@ func OriginAllowed(originHeader string, allowed []string) bool {
 	return false
 }
 
-// NormalizeOriginHost extracts a comparable hostname from an Origin URL or
-// bare host entry (lowercase, port stripped). Empty/invalid input yields "".
-func NormalizeOriginHost(origin string) string {
-	host, ok := originHostname(origin)
-	if !ok {
-		return ""
-	}
-	return host
-}
-
 func originHostname(origin string) (string, bool) {
 	origin = strings.TrimSpace(origin)
 	if origin == "" {

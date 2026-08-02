@@ -64,6 +64,24 @@ func TestFindServicesForHost(t *testing.T) {
 	}
 }
 
+func TestFindServicesForHostStableOverlapOrder(t *testing.T) {
+	services := map[string]ServiceCred{
+		"zeta":  {Name: "zeta", HostGlob: "*", Username: "z", PasswordHash: "hz"},
+		"alpha": {Name: "alpha", HostGlob: "api.example.com", Username: "a", PasswordHash: "ha"},
+		"mid":   {Name: "mid", HostGlob: "*.example.com", Username: "m", PasswordHash: "hm"},
+	}
+	got := FindServicesForHost(services, "api.example.com")
+	if len(got) != 3 {
+		t.Fatalf("want 3 matches, got %#v", got)
+	}
+	want := []string{"alpha", "mid", "zeta"}
+	for i, name := range want {
+		if got[i].Name != name {
+			t.Fatalf("match[%d]=%q, want %q (full=%#v)", i, got[i].Name, name, got)
+		}
+	}
+}
+
 func TestHostGlobsOverlap(t *testing.T) {
 	tests := []struct {
 		a, b string

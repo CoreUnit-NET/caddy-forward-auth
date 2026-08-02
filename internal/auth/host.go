@@ -18,12 +18,15 @@ func HostMatches(hostGlob, host string) bool {
 }
 
 // FindServicesForHost returns every configured service whose host glob matches host.
+// Matches are ordered by service name so callers (logs, flood service hints) are stable
+// when multiple overlapping globs match the same host.
 func FindServicesForHost(services map[string]ServiceCred, host string) []ServiceCred {
 	if len(services) == 0 {
 		return nil
 	}
 	matched := make([]ServiceCred, 0)
-	for _, cred := range services {
+	for _, name := range SortedServiceNames(services) {
+		cred := services[name]
 		if HostMatches(cred.HostGlob, host) {
 			matched = append(matched, cred)
 		}

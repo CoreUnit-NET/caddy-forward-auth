@@ -33,7 +33,7 @@ func TestOriginAllowed(t *testing.T) {
 	}
 }
 
-func TestNormalizeOriginHost(t *testing.T) {
+func TestOriginHostname(t *testing.T) {
 	tests := []struct {
 		in   string
 		want string
@@ -47,8 +47,12 @@ func TestNormalizeOriginHost(t *testing.T) {
 		{"://", ""},
 	}
 	for _, tt := range tests {
-		if got := NormalizeOriginHost(tt.in); got != tt.want {
-			t.Fatalf("NormalizeOriginHost(%q) = %q, want %q", tt.in, got, tt.want)
+		got, ok := originHostname(tt.in)
+		if !ok {
+			got = ""
+		}
+		if got != tt.want {
+			t.Fatalf("originHostname(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

@@ -4,11 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/persist"
 )
 
 // ErrPeriodicSaveRunning is returned when StartPeriodicSave is called while a
@@ -27,10 +26,7 @@ type Bundle struct {
 	path     string
 	dirty    bool
 	elements []Element
-
-	stopCh  chan struct{}
-	doneCh  chan struct{}
-	running bool
+	saver    persist.Periodic
 }
 
 // bundleFile is the on-disk JSON shape.
@@ -51,12 +47,9 @@ func Open(path string) (*Bundle, error) {
 		path = DefaultPath
 	}
 	b := &Bundle{path: path}
-	data, err := os.ReadFile(path)
+	data, err := persist.ReadFileIfExists(path)
 	if err != nil {
-		if os.IsNotExist(err) {
-			return b, nil
-		}
-		return nil, fmt.Errorf("ipwhitelist: load %q: %w", path, err)
+		return nil, fmt.Errorf("ipwhitelist: %w", err)
 	}
 	if len(data) == 0 {
 		return b, nil
@@ -187,35 +180,9 @@ func (b *Bundle) saveLocked(now time.Time) error {
 	if err != nil {
 		return fmt.Errorf("ipwhitelist: encode: %w", err)
 	}
-
-	dir := filepath.Dir(b.path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("ipwhitelist: mkdir %q: %w", dir, err)
+	if err := persist.WriteAtomic(b.path, data); err != nil {
+		return fmt.Errorf("ipwhitelist: %w", err)
 	}
-
-	tmp, err := os.CreateTemp(dir, filepath.Base(b.path)+".tmp-*")
-	if err != nil {
-		return fmt.Errorf("ipwhitelist: create temp: %w", err)
-	}
-	tmpName := tmp.Name()
-	cleanup := true
-	defer func() {
-		if cleanup {
-			_ = os.Remove(tmpName)
-		}
-	}()
-
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		return fmt.Errorf("ipwhitelist: write temp: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("ipwhitelist: close temp: %w", err)
-	}
-	if err := os.Rename(tmpName, b.path); err != nil {
-		return fmt.Errorf("ipwhitelist: rename %q -> %q: %w", tmpName, b.path, err)
-	}
-	cleanup = false
 	b.dirty = false
 	return nil
 }
@@ -273,66 +240,25 @@ func encodeBundle(elements []Element, indent bool) ([]byte, error) {
 // the given interval. Non-positive interval uses DefaultSaveInterval.
 // Returns ErrPeriodicSaveRunning if already active.
 func (b *Bundle) StartPeriodicSave(interval time.Duration) error {
-	if interval <= 0 {
-		interval = DefaultSaveInterval
-	}
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.running {
+	err := b.saver.Start(interval, DefaultSaveInterval, b.Save, "ipwhitelist")
+	if errors.Is(err, persist.ErrAlreadyRunning) {
 		return ErrPeriodicSaveRunning
 	}
-	b.stopCh = make(chan struct{})
-	b.doneCh = make(chan struct{})
-	b.running = true
-	stopCh := b.stopCh
-	doneCh := b.doneCh
-	go b.periodicSaveLoop(interval, stopCh, doneCh)
-	return nil
+	return err
 }
 
 // StopPeriodicSave stops the background saver and waits for it to finish.
 // It flushes a dirty bundle once before returning.
 // Returns ErrPeriodicSaveNotRunning if no saver is active.
 func (b *Bundle) StopPeriodicSave() error {
-	b.mu.Lock()
-	if !b.running {
-		b.mu.Unlock()
+	err := b.saver.Stop(b.Save)
+	if errors.Is(err, persist.ErrNotRunning) {
 		return ErrPeriodicSaveNotRunning
 	}
-	stopCh := b.stopCh
-	doneCh := b.doneCh
-	b.mu.Unlock()
-
-	close(stopCh)
-	<-doneCh
-
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.running = false
-	b.stopCh = nil
-	b.doneCh = nil
-	return b.saveLocked(time.Now().UTC())
+	return err
 }
 
 // PeriodicSaveRunning reports whether the periodic saver is active.
 func (b *Bundle) PeriodicSaveRunning() bool {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	return b.running
-}
-
-func (b *Bundle) periodicSaveLoop(interval time.Duration, stopCh, doneCh chan struct{}) {
-	defer close(doneCh)
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-	for {
-		select {
-		case <-stopCh:
-			return
-		case <-ticker.C:
-			if err := b.Save(); err != nil {
-				log.Printf("ipwhitelist: periodic save: %v", err)
-			}
-		}
-	}
+	return b.saver.Running()
 }

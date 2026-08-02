@@ -24,23 +24,6 @@ var rules = []punishmentRule{
 	{ID: "240/168h", Count: 240, Window: 168 * time.Hour, Permanent: true},
 }
 
-// harsherBan reports whether a is a stronger punishment than b.
-func harsherBan(a, b floodban.Ban) bool {
-	if a.IP == "" {
-		return false
-	}
-	if b.IP == "" {
-		return true
-	}
-	if a.Permanent {
-		return !b.Permanent
-	}
-	if b.Permanent {
-		return false
-	}
-	return a.ExpiresAt.After(b.ExpiresAt)
-}
-
 func banFromRule(ip string, now time.Time, rule punishmentRule) floodban.Ban {
 	ban := floodban.Ban{
 		IP:        ip,
