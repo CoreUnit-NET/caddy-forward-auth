@@ -19,6 +19,9 @@ func TestOriginAllowed(t *testing.T) {
 		{"blocked", "https://evil.example.com", allowed, false},
 		{"bare hostname allowed", "localhost", allowed, true},
 		{"invalid origin", "://", allowed, false},
+		{"allowed list with port", "https://localhost", []string{"localhost:3000"}, true},
+		{"allowed list as url", "https://intern-auth.example.com", []string{"https://Intern-Auth.Example.COM"}, true},
+		{"allowed list url with port", "http://auth-test.example.com:8080", []string{"https://auth-test.example.com:443"}, true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -27,5 +30,25 @@ func TestOriginAllowed(t *testing.T) {
 				t.Fatalf("OriginAllowed(%q) = %v, want %v", tt.origin, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalizeOriginHost(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{"", ""},
+		{"  ", ""},
+		{"Example.COM", "example.com"},
+		{"example.com:443", "example.com"},
+		{"https://Example.COM:8443/path", "example.com"},
+		{"http://localhost:3000", "localhost"},
+		{"://", ""},
+	}
+	for _, tt := range tests {
+		if got := NormalizeOriginHost(tt.in); got != tt.want {
+			t.Fatalf("NormalizeOriginHost(%q) = %q, want %q", tt.in, got, tt.want)
+		}
 	}
 }

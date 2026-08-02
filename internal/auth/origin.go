@@ -9,7 +9,8 @@ import (
 // Rules:
 //   - empty allowed list => no Origin enforcement (always true)
 //   - empty Origin header => allowed (non-browser / caddy probes)
-//   - otherwise the Origin URL hostname must be in allowed (case-insensitive)
+//   - otherwise the Origin URL hostname must match an allowed entry
+//     (case-insensitive; ports stripped; bare host or absolute URL accepted)
 func OriginAllowed(originHeader string, allowed []string) bool {
 	if len(allowed) == 0 {
 		return true
@@ -23,15 +24,29 @@ func OriginAllowed(originHeader string, allowed []string) bool {
 		return false
 	}
 	for _, item := range allowed {
-		item = strings.ToLower(strings.TrimSpace(item))
-		if item != "" && item == host {
+		allowedHost, ok := originHostname(item)
+		if ok && allowedHost == host {
 			return true
 		}
 	}
 	return false
 }
 
+// NormalizeOriginHost extracts a comparable hostname from an Origin URL or
+// bare host entry (lowercase, port stripped). Empty/invalid input yields "".
+func NormalizeOriginHost(origin string) string {
+	host, ok := originHostname(origin)
+	if !ok {
+		return ""
+	}
+	return host
+}
+
 func originHostname(origin string) (string, bool) {
+	origin = strings.TrimSpace(origin)
+	if origin == "" {
+		return "", false
+	}
 	// Origin is normally an absolute URL (scheme://host[:port]).
 	u, err := url.Parse(origin)
 	if err != nil || u.Host == "" {
