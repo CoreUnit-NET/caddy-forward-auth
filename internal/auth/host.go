@@ -4,10 +4,10 @@ import (
 	"strings"
 )
 
-// HostMatches reports whether host matches the SERVICE_* host glob.
-// Matching is case-insensitive. '*' matches exactly one DNS label
-// (e.g. "*.intern.example.com" matches "foo.intern.example.com"
-// but not "a.b.intern.example.com").
+// HostMatches reports whether host matches a host glob (SERVICE_* hostGlob
+// or ALLOWED_ORIGINS entries). Matching is case-insensitive. '*' matches
+// exactly one DNS label (e.g. "*.intern.example.com" matches
+// "foo.intern.example.com" but not "a.b.intern.example.com").
 func HostMatches(hostGlob, host string) bool {
 	hostGlob = strings.ToLower(strings.TrimSpace(hostGlob))
 	host = normalizeHost(host)

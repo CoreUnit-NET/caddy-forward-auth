@@ -117,7 +117,7 @@ Additional commands: `serve`, `version` (also `-v` / `--version`).
 | `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup                              |
 | `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address                                                                                                 |
 | `--port`            | `PORT`            | int  | `8080`    | Listen port                                                                                                    |
-| `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames. When set, other origins are rejected with `403`. Empty disables origin enforcement |
+| `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames/globs (same rules as `SERVICE_*` hostGlob: exact, `*.example.com`, or `*`). When set, other origins are rejected with `403`. Empty disables origin enforcement |
 
 Quick help:
 
@@ -145,7 +145,7 @@ Example:
 ```sh
 PORT=8080
 HOST=0.0.0.0
-ALLOWED_ORIGINS="intern-auth.example.com, localhost, auth-test.example.com"
+ALLOWED_ORIGINS="intern-auth.example.com, localhost, *.intern.example.com"
 SERVICE_test="test.example.com/tester/$2a$14$AnhQELX1cqeO3YaLPOTWtOuPsKZgweRHrYLcqzQUcvokbVZmzNWrO"
 SERVICE_intern="*.intern.example.com/intern-user/$2a$14$54tdWftb4iOouKyfDyURPuI6rOIwcbjqKYfzOqYE0PyOcmVFnU1mM"
 ```

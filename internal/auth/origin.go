@@ -10,7 +10,8 @@ import (
 //   - empty allowed list => no Origin enforcement (always true)
 //   - empty Origin header => allowed (non-browser / Caddy probes)
 //   - otherwise the Origin URL hostname must match an allowed entry
-//     (case-insensitive; ports stripped; bare host or absolute URL accepted)
+//     (case-insensitive; ports stripped; bare host, absolute URL, or
+//     HostMatches glob such as "*.intern.example.com" / "*")
 func OriginAllowed(originHeader string, allowed []string) bool {
 	if len(allowed) == 0 {
 		return true
@@ -24,8 +25,8 @@ func OriginAllowed(originHeader string, allowed []string) bool {
 		return false
 	}
 	for _, item := range allowed {
-		allowedHost, ok := originHostname(item)
-		if ok && allowedHost == host {
+		pattern, ok := originHostname(item)
+		if ok && HostMatches(pattern, host) {
 			return true
 		}
 	}

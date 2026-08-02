@@ -125,6 +125,27 @@ func TestAuthProbeOriginRejected(t *testing.T) {
 	assertAuthLog(t, buf.String(), "status=403", "reason=origin")
 }
 
+func TestAuthProbeOriginGlobAllowed(t *testing.T) {
+	h := NewHandler(
+		testLogger(t),
+		[]string{"*.intern.example.com"},
+		testServices(t),
+		"test-realm",
+		nil,
+		nil,
+	)
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("Authorization", basicHeader("tester", "secret"))
+	req.Header.Set("Origin", "https://ai-dashboard.intern.example.com")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestAuthProbeWildcardHost(t *testing.T) {
 	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

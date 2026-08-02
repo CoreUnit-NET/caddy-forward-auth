@@ -76,7 +76,7 @@ func applyServeFlags(appConfig *AppConfig, cmd *cobra.Command) {
 	// Persistent so bare root and `serve` share one definition (explorer-mcp style).
 	cmd.PersistentFlags().StringVar(&appConfig.Host, "host", appConfig.Host, "bind address (HOST)")
 	cmd.PersistentFlags().IntVar(&appConfig.Port, "port", appConfig.Port, "listen port (PORT)")
-	cmd.PersistentFlags().StringVar(&appConfig.AllowedOrigins, "allowed-origins", appConfig.AllowedOrigins, "CSV of allowed Origin hostnames (ALLOWED_ORIGINS)")
+	cmd.PersistentFlags().StringVar(&appConfig.AllowedOrigins, "allowed-origins", appConfig.AllowedOrigins, "CSV of allowed Origin hostnames/globs (ALLOWED_ORIGINS; same hostGlob rules as SERVICE_*)")
 }
 
 // ParseConfig loads env defaults, parses CLI flags/subcommands, and returns the app config.
@@ -141,6 +141,7 @@ func commandHelpRequested(cmd *cobra.Command) bool {
 }
 
 // AllowedOriginList returns trimmed, non-empty origin entries from AllowedOrigins CSV.
+// Entries may be exact hostnames or host globs (same rules as SERVICE_* hostGlob).
 func (c *AppConfig) AllowedOriginList() []string {
 	if strings.TrimSpace(c.AllowedOrigins) == "" {
 		return nil

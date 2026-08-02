@@ -22,6 +22,12 @@ func TestOriginAllowed(t *testing.T) {
 		{"allowed list with port", "https://localhost", []string{"localhost:3000"}, true},
 		{"allowed list as url", "https://intern-auth.example.com", []string{"https://Intern-Auth.Example.COM"}, true},
 		{"allowed list url with port", "http://auth-test.example.com:8080", []string{"https://auth-test.example.com:443"}, true},
+		{"glob single label", "https://foo.intern.example.com", []string{"*.intern.example.com"}, true},
+		{"glob multi label blocked", "https://a.b.intern.example.com", []string{"*.intern.example.com"}, false},
+		{"glob bare star", "https://anything.example.com", []string{"*"}, true},
+		{"glob mixed with exact", "https://ai-dashboard.intern.coreunit.net", []string{"gateway.example.com", "*.intern.coreunit.net"}, true},
+		{"glob as url pattern", "https://bar.intern.example.com", []string{"https://*.intern.example.com"}, true},
+		{"glob no match", "https://evil.example.com", []string{"*.intern.example.com"}, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -45,6 +51,9 @@ func TestOriginHostname(t *testing.T) {
 		{"https://Example.COM:8443/path", "example.com"},
 		{"http://localhost:3000", "localhost"},
 		{"://", ""},
+		{"*.intern.example.com", "*.intern.example.com"},
+		{"https://*.intern.example.com", "*.intern.example.com"},
+		{"*", "*"},
 	}
 	for _, tt := range tests {
 		got, ok := originHostname(tt.in)
