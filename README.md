@@ -9,6 +9,7 @@
 
 intern-auth-gateway is a small HTTP auth service for Caddy `forward_auth`.
 It verifies HTTP Basic credentials against per-service bcrypt hashes and only then lets Caddy allow access to the protected upstream hosts.
+After a successful login it can temporarily whitelist the client IP so browsers do not need to resend Basic auth on every request.
 
 # Table of Contents
 
@@ -44,11 +45,13 @@ It verifies HTTP Basic credentials against per-service bcrypt hashes and only th
 - **Target host resolution**: The protected host is taken from `X-Forwarded-Host` (first value if CSV), falling back to the request `Host`.
 - **Startup checks**: Boot fails when no `SERVICE_*` entries are configured or when a password hash is not valid bcrypt.
 - **Auth event logs**: Every probe logs a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords).
+- **Temporary IP whitelist**: After successful Basic auth, the client IP can be remembered for a limited time (default 48h) so follow-up probes succeed without a new password prompt. State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
 
 ## Out of scope
 
 - **TLS / HTTPS**: Terminate TLS in front of this service (for example with Caddy). The gateway itself listens on plain HTTP.
-- **Non-Basic auth**: OAuth, OIDC, cookies, API keys, mTLS, and similar methods are not supported.
+- **Cookie / session login**: No browser cookies or server sessions. Temporary IP whitelisting is used instead of a session store.
+- **Non-Basic auth**: OAuth, OIDC, API keys, mTLS, and similar methods are not supported.
 - **Reverse-proxy duties**: This process only answers auth probes. Upstream proxying, routing, and TLS remain Caddy’s responsibility.
 - **Non-Caddy gatekeeping**: The handler is built for Caddy `forward_auth`. Other proxy auth protocols are not a goal.
 - **Brute-force rate limiting**: Rely on network placement, Caddy, or an external limiter.
@@ -61,6 +64,7 @@ It verifies HTTP Basic credentials against per-service bcrypt hashes and only th
 - Short auth event logs always include hostnames and usernames (not passwords).
 - `--verbose` / `VERBOSE` additionally dumps every registered service on startup **including password hashes**, plus allowed origins. Use only while debugging on a private network.
 - Put secrets in `.env` (loaded automatically if present) or your secret manager; never commit real password hashes.
+- The temporary IP whitelist file (`./data/ipwhitelist.json` by default) trusts client IPs as seen by this process—keep the gateway on a private network behind Caddy so those addresses are meaningful.
 
 ## Usage with Caddy
 
