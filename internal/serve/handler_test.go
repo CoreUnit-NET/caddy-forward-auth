@@ -58,14 +58,14 @@ func testServices(t *testing.T) map[string]auth.ServiceCred {
 
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
-	return NewHandler(testLogger(t), testOrigins(), testServices(t), "test-realm", nil, nil)
+	return NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", nil, nil)
 }
 
 func testHandlerWithLog(t *testing.T) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	return NewHandler(logger, testOrigins(), testServices(t), "test-realm", nil, nil), &buf
+	return NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, nil), &buf
 }
 
 func basicHeader(user, pass string) string {
@@ -90,7 +90,16 @@ func TestAuthProbeSuccess(t *testing.T) {
 	if got := rr.Header().Get("Remote-User"); got != "tester" {
 		t.Fatalf("Remote-User = %q, want tester", got)
 	}
-	assertAuthLog(t, buf.String(), "status=200", "path=/auth", "host=test.example.com", "service=test", "user=tester", "reason=ok")
+	assertAuthLog(t, buf.String(),
+		"status=200",
+		"method=GET",
+		"path=/auth",
+		"host=test.example.com",
+		"origin=https://intern-auth.example.com",
+		"service=test",
+		"user=tester",
+		"reason=ok",
+	)
 }
 
 func TestAuthProbeUnauthorized(t *testing.T) {
@@ -114,6 +123,7 @@ func TestAuthProbeOriginRejected(t *testing.T) {
 	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "203.0.113.50")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
 	req.Header.Set("Origin", "https://evil.example.com")
 
@@ -122,12 +132,34 @@ func TestAuthProbeOriginRejected(t *testing.T) {
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rr.Code)
 	}
-	assertAuthLog(t, buf.String(), "status=403", "reason=origin")
+	assertAuthLog(t, buf.String(),
+		"status=403",
+		"method=GET",
+		"host=test.example.com",
+		"origin=https://evil.example.com",
+		"ip=203.0.113.50",
+		"reason=origin_not_allowed",
+	)
+}
+
+func TestAuthProbeOriginNullRejected(t *testing.T) {
+	h, buf := testHandlerWithLog(t)
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("Origin", "null")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "origin=null", "reason=origin_not_allowed")
 }
 
 func TestAuthProbeOriginGlobAllowed(t *testing.T) {
 	h := NewHandler(
 		testLogger(t),
+		true,
 		[]string{"*.intern.example.com"},
 		testServices(t),
 		"test-realm",
@@ -235,7 +267,7 @@ func TestAuthProbeWhitelistedSkipsBasic(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, testOrigins(), testServices(t), "test-realm", wl, nil)
+	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", wl, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -246,7 +278,43 @@ func TestAuthProbeWhitelistedSkipsBasic(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d, want 200", rr.Code)
 	}
-	assertAuthLog(t, buf.String(), "status=200", "reason=whitelisted")
+	assertAuthLog(t, buf.String(), "status=200", "ip=203.0.113.10", "reason=whitelisted")
+}
+
+func TestAuthProbeSuccessSilentWithoutVerbose(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	h := NewHandler(logger, false, testOrigins(), testServices(t), "test-realm", nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("Authorization", basicHeader("tester", "secret"))
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", rr.Code)
+	}
+	if buf.Len() != 0 {
+		t.Fatalf("expected no success log without verbose, got: %q", buf.String())
+	}
+}
+
+func TestAuthProbeRejectionLoggedWithoutVerbose(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	h := NewHandler(logger, false, testOrigins(), testServices(t), "test-realm", nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("Origin", "https://evil.example.com")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status=%d, want 403", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "origin=https://evil.example.com", "reason=origin_not_allowed")
 }
 
 func TestAuthProbeRecordsFloodOnAuthFailed(t *testing.T) {
@@ -258,7 +326,7 @@ func TestAuthProbeRecordsFloodOnAuthFailed(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, testOrigins(), testServices(t), "test-realm", nil, eng)
+	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -273,7 +341,7 @@ func TestAuthProbeRecordsFloodOnAuthFailed(t *testing.T) {
 	if got := len(eng.Track.Entries()); got != 1 {
 		t.Fatalf("flood entries=%d, want 1", got)
 	}
-	assertAuthLog(t, buf.String(), "reason=auth_failed")
+	assertAuthLog(t, buf.String(), "reason=auth_failed", "ip=198.51.100.20")
 }
 
 func TestAuthProbePermanentBan(t *testing.T) {
@@ -291,7 +359,7 @@ func TestAuthProbePermanentBan(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, testOrigins(), testServices(t), "test-realm", nil, eng)
+	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -303,7 +371,19 @@ func TestAuthProbePermanentBan(t *testing.T) {
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status=%d, want 403", rr.Code)
 	}
-	assertAuthLog(t, buf.String(), "reason=banned")
+	assertAuthLog(t, buf.String(), "reason=banned", "ip=198.51.100.30")
+}
+
+func TestAtom(t *testing.T) {
+	if got := atom(""); got != "-" {
+		t.Fatalf("atom empty = %q, want -", got)
+	}
+	if got := atom("ok"); got != "ok" {
+		t.Fatalf("atom plain = %q, want ok", got)
+	}
+	if got := atom("a b"); got != `"a b"` {
+		t.Fatalf("atom spaced = %q, want quoted", got)
+	}
 }
 
 func assertAuthLog(t *testing.T, got string, wantParts ...string) {

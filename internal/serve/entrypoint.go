@@ -68,7 +68,7 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           NewHandler(logger, origins, services, shortName, whitelist, floodEng),
+		Handler:           NewHandler(logger, appConfig.Verbose, origins, services, shortName, whitelist, floodEng),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,

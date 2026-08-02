@@ -3,8 +3,10 @@ package serve
 import (
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/auth"
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/flood"
@@ -16,8 +18,11 @@ import (
 // A single "/" registration is used because Go's "/" pattern is a catch-all;
 // the in-handler path gate rejects every other path with 404.
 // whitelist and floodEng may be nil to disable those features (tests).
+// When verbose is true, successful probes are logged too; errors and
+// rejections are always logged with atomic key=value fields.
 func NewHandler(
 	logger *log.Logger,
+	verbose bool,
 	allowedOrigins []string,
 	services map[string]auth.ServiceCred,
 	realm string,
@@ -25,12 +30,13 @@ func NewHandler(
 	floodEng *flood.Engine,
 ) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", authProbe(logger, allowedOrigins, services, realm, whitelist, floodEng))
+	mux.HandleFunc("/", authProbe(logger, verbose, allowedOrigins, services, realm, whitelist, floodEng))
 	return mux
 }
 
 func authProbe(
 	logger *log.Logger,
+	verbose bool,
 	allowedOrigins []string,
 	services map[string]auth.ServiceCred,
 	realm string,
@@ -39,28 +45,29 @@ func authProbe(
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
+		method := r.Method
 		targetHost := requestTargetHost(r)
 		now := time.Now().UTC()
 		clientIP := flood.ClientIP(r)
+		origin := r.Header.Get("Origin")
 
 		// Exact-path gate: ServeMux "/" is a catch-all; reject other paths with 404.
 		if path != "/" && path != "/auth" {
 			http.NotFound(w, r)
-			logAuthEvent(logger, http.StatusNotFound, path, targetHost, "", "", "not_found")
+			logAuthEvent(logger, verbose, http.StatusNotFound, method, path, targetHost, origin, clientIP, "", "", "not_found")
 			return
 		}
 
-		origin := r.Header.Get("Origin")
 		if !auth.OriginAllowed(origin, allowedOrigins) {
 			http.Error(w, "origin not allowed", http.StatusForbidden)
-			logAuthEvent(logger, http.StatusForbidden, path, targetHost, "", "", "origin")
+			logAuthEvent(logger, verbose, http.StatusForbidden, method, path, targetHost, origin, clientIP, "", "", "origin_not_allowed")
 			return
 		}
 
 		matched := auth.FindServicesForHost(services, targetHost)
 		if len(matched) == 0 {
 			unauthorized(w, realm)
-			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", "", "no_service")
+			logAuthEvent(logger, verbose, http.StatusUnauthorized, method, path, targetHost, origin, clientIP, "", "", "no_service")
 			return
 		}
 		serviceHint := matched[0].Name
@@ -74,7 +81,7 @@ func authProbe(
 				if ban.Permanent {
 					reason = "banned"
 				}
-				logAuthEvent(logger, http.StatusForbidden, path, targetHost, serviceHint, "", reason)
+				logAuthEvent(logger, verbose, http.StatusForbidden, method, path, targetHost, origin, clientIP, serviceHint, "", reason)
 				return
 			}
 		}
@@ -82,7 +89,7 @@ func authProbe(
 		// Temporary IP whitelist: skip Basic auth for remembered clients.
 		if whitelist != nil && clientIP != "" && whitelist.Contains(clientIP, now) {
 			w.WriteHeader(http.StatusOK)
-			logAuthEvent(logger, http.StatusOK, path, targetHost, serviceHint, "", "whitelisted")
+			logAuthEvent(logger, verbose, http.StatusOK, method, path, targetHost, origin, clientIP, serviceHint, "", "whitelisted")
 			return
 		}
 
@@ -92,7 +99,7 @@ func authProbe(
 				floodEng.RecordFailure(clientIP, serviceHint, now)
 			}
 			unauthorized(w, realm)
-			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, serviceHint, "", "no_credentials")
+			logAuthEvent(logger, verbose, http.StatusUnauthorized, method, path, targetHost, origin, clientIP, serviceHint, "", "no_credentials")
 			return
 		}
 
@@ -102,7 +109,7 @@ func authProbe(
 				floodEng.RecordFailure(clientIP, serviceHint, now)
 			}
 			unauthorized(w, realm)
-			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, serviceHint, username, "auth_failed")
+			logAuthEvent(logger, verbose, http.StatusUnauthorized, method, path, targetHost, origin, clientIP, serviceHint, username, "auth_failed")
 			return
 		}
 
@@ -112,25 +119,45 @@ func authProbe(
 
 		w.Header().Set("Remote-User", cred.Username)
 		w.WriteHeader(http.StatusOK)
-		logAuthEvent(logger, http.StatusOK, path, targetHost, cred.Name, cred.Username, "ok")
+		logAuthEvent(logger, verbose, http.StatusOK, method, path, targetHost, origin, clientIP, cred.Name, cred.Username, "ok")
 	}
 }
 
-func logAuthEvent(logger *log.Logger, status int, path, host, service, user, reason string) {
+// logAuthEvent writes one atomic key=value auth line.
+// Errors and rejections (status >= 400) always log; successes only when verbose.
+func logAuthEvent(
+	logger *log.Logger,
+	verbose bool,
+	status int,
+	method, path, host, origin, ip, service, user, reason string,
+) {
+	if status < 400 && !verbose {
+		return
+	}
 	logger.Printf(
-		"auth status=%d path=%s host=%s service=%s user=%s reason=%s",
+		"auth status=%d method=%s path=%s host=%s origin=%s ip=%s service=%s user=%s reason=%s",
 		status,
-		dashIfEmpty(path),
-		dashIfEmpty(host),
-		dashIfEmpty(service),
-		dashIfEmpty(user),
-		dashIfEmpty(reason),
+		atom(method),
+		atom(path),
+		atom(host),
+		atom(origin),
+		atom(ip),
+		atom(service),
+		atom(user),
+		atom(reason),
 	)
 }
 
-func dashIfEmpty(value string) string {
+// atom formats a log field value: empty -> "-", otherwise the raw value, or
+// a quoted form when the value contains whitespace or quotes.
+func atom(value string) string {
 	if value == "" {
 		return "-"
+	}
+	if strings.IndexFunc(value, func(r rune) bool {
+		return unicode.IsSpace(r) || r == '"'
+	}) >= 0 {
+		return strconv.Quote(value)
 	}
 	return value
 }
