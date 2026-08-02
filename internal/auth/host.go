@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"sort"
 	"strings"
 )
 
@@ -61,11 +60,7 @@ func OverlappingHostGlobPairs(services map[string]ServiceCred) [][2]string {
 	if len(services) < 2 {
 		return nil
 	}
-	names := make([]string, 0, len(services))
-	for name := range services {
-		names = append(names, name)
-	}
-	sort.Strings(names)
+	names := SortedServiceNames(services)
 
 	pairs := make([][2]string, 0)
 	for i := 0; i < len(names); i++ {
