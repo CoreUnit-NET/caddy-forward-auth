@@ -46,11 +46,11 @@ GOCACHE ?= $(shell if [ -d "$$(go env GOCACHE)" ]; then realpath "$$(go env GOCA
 CACHE_DIR ?= $(GOCACHE)
 
 ##@ These environment variables control various project configurations, including build, run, and deployment settings.
-##@ They are loaded from the `.env.projects` file, which is overwritten the `.env` file variables.
+##@ They are loaded from the `.env.project` file and overwrite the `.env` file variables.
 ##@
 ##@ Makefile vars
 ##@
-##@ PROJECT_DISPLAY_NAME: projects full name,
+##@ PROJECT_DISPLAY_NAME: project's full name,
 ##@: default adds 'Example App' to '.env.project'
 ##@ PROJECT_VERSION: semver like project version,
 ##@: default adds '0.0.1' to '.env.project'
