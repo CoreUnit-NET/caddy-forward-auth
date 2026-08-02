@@ -8,7 +8,7 @@ import (
 // OriginAllowed reports whether the request Origin header is permitted.
 // Rules:
 //   - empty allowed list => no Origin enforcement (always true)
-//   - empty Origin header => allowed (non-browser / caddy probes)
+//   - empty Origin header => allowed (non-browser / Caddy probes)
 //   - otherwise the Origin URL hostname must match an allowed entry
 //     (case-insensitive; ports stripped; bare host or absolute URL accepted)
 func OriginAllowed(originHeader string, allowed []string) bool {

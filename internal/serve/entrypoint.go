@@ -17,7 +17,7 @@ import (
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
 )
 
-// Run starts the HTTP server for caddy forward_auth probes.
+// Run starts the HTTP server for Caddy forward_auth probes.
 func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) error {
 	services, err := auth.LoadServicesFromEnv()
 	if err != nil {

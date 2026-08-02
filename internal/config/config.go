@@ -33,7 +33,7 @@ func defaultAppConfig() *AppConfig {
 func versionCommand(appConfig *AppConfig) *cobra.Command {
 	return &cobra.Command{
 		Use:   "version",
-		Short: "Prints version message",
+		Short: "Print version",
 		Run: func(cmd *cobra.Command, args []string) {
 			appConfig.ShowVersion = true
 		},
@@ -85,7 +85,7 @@ func applyServeFlags(appConfig *AppConfig, cmd *cobra.Command) {
 func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 	appConfig := defaultAppConfig()
 
-	short := displayName + " is a basic-auth gateway for caddy forward_auth probes.\n" +
+	short := displayName + " answers Caddy forward_auth probes with HTTP Basic auth.\n" +
 		"For more help, visit " + helpURL
 	rootCmd := &cobra.Command{
 		Use:   shortName,
@@ -96,7 +96,7 @@ func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&appConfig.Verbose, "verbose", "b", appConfig.Verbose, "enable verbose mode (VERBOSE)")
-	rootCmd.Flags().BoolVarP(&appConfig.ShowVersion, "version", "v", appConfig.ShowVersion, "prints version")
+	rootCmd.Flags().BoolVarP(&appConfig.ShowVersion, "version", "v", appConfig.ShowVersion, "print version")
 
 	applyServeFlags(appConfig, rootCmd)
 
@@ -109,7 +109,7 @@ func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 		serveCommand(),
 	)
 
-	// wanted behavior: shows an error when using the "help" subcommand and does not execute
+	// Disable cobra's help subcommand so `help` is not a valid command.
 	rootCmd.SetHelpCommand(&cobra.Command{
 		Use:    "",
 		Hidden: true,

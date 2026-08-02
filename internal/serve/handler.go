@@ -11,7 +11,7 @@ import (
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
 )
 
-// NewHandler builds the HTTP handler used for caddy forward_auth probes.
+// NewHandler builds the HTTP handler used for Caddy forward_auth probes.
 // Only exact "/" and "/auth" paths are accepted (README contract).
 // A single "/" registration is used because Go's "/" pattern is a catch-all;
 // the in-handler path gate rejects every other path with 404.
