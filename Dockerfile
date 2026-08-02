@@ -21,8 +21,12 @@ RUN make build
 ### DEPLOY
 FROM ubuntu:24.04 AS deploy
 
-RUN useradd -m appuser --uid 10000
+RUN useradd -m appuser --uid 10000 \
+	&& mkdir -p /app/data \
+	&& chown -R 10000:10000 /app
+
 USER 10000
+WORKDIR /app
 
 COPY --from=base-deploy --chown=10000 /app/bin /usr/local/bin/appbin
 
