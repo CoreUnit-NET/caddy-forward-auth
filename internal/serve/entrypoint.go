@@ -1,13 +1,20 @@
 package serve
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/config"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/flood"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/ipwhitelist"
 )
 
 // Run starts the HTTP server for caddy forward_auth probes.
@@ -15,6 +22,24 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 	services, err := auth.LoadServicesFromEnv()
 	if err != nil {
 		return fmt.Errorf("services: %w", err)
+	}
+
+	whitelist, err := ipwhitelist.OpenDefault()
+	if err != nil {
+		return fmt.Errorf("ip whitelist: %w", err)
+	}
+	if err := whitelist.StartPeriodicSave(0); err != nil {
+		return fmt.Errorf("ip whitelist: start save: %w", err)
+	}
+
+	floodEng, err := flood.OpenDefaults()
+	if err != nil {
+		_ = whitelist.StopPeriodicSave()
+		return fmt.Errorf("flood: %w", err)
+	}
+	if err := floodEng.StartPersistence(0, 0); err != nil {
+		_ = whitelist.StopPeriodicSave()
+		return fmt.Errorf("flood: start persistence: %w", err)
 	}
 
 	addr := fmt.Sprintf("%s:%d", appConfig.Host, appConfig.Port)
@@ -43,13 +68,44 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           NewHandler(logger, origins, services, shortName),
+		Handler:           NewHandler(logger, origins, services, shortName, whitelist, floodEng),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	return server.ListenAndServe()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		errCh <- server.ListenAndServe()
+	}()
+
+	select {
+	case <-ctx.Done():
+		logger.Printf("shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			logger.Printf("http shutdown: %v", err)
+		}
+		if err := floodEng.StopPersistence(); err != nil {
+			logger.Printf("flood stop: %v", err)
+		}
+		if err := whitelist.StopPeriodicSave(); err != nil {
+			logger.Printf("ip whitelist stop: %v", err)
+		}
+		return nil
+	case err := <-errCh:
+		_ = floodEng.StopPersistence()
+		_ = whitelist.StopPeriodicSave()
+		if errors.Is(err, http.ErrServerClosed) {
+			return nil
+		}
+		return err
+	}
 }
 
 func logVerboseConfig(logger *log.Logger, services map[string]auth.ServiceCred, origins []string) {

@@ -4,24 +4,44 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/CoreUnit-NET/intern-auth-gateway/internal/auth"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/flood"
+	"github.com/CoreUnit-NET/intern-auth-gateway/internal/ipwhitelist"
 )
 
 // NewHandler builds the HTTP handler used for caddy forward_auth probes.
 // Only exact "/" and "/auth" paths are accepted (README contract).
 // A single "/" registration is used because Go's "/" pattern is a catch-all;
 // the in-handler path gate rejects every other path with 404.
-func NewHandler(logger *log.Logger, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.Handler {
+// whitelist and floodEng may be nil to disable those features (tests).
+func NewHandler(
+	logger *log.Logger,
+	allowedOrigins []string,
+	services map[string]auth.ServiceCred,
+	realm string,
+	whitelist *ipwhitelist.Bundle,
+	floodEng *flood.Engine,
+) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", authProbe(logger, allowedOrigins, services, realm))
+	mux.HandleFunc("/", authProbe(logger, allowedOrigins, services, realm, whitelist, floodEng))
 	return mux
 }
 
-func authProbe(logger *log.Logger, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.HandlerFunc {
+func authProbe(
+	logger *log.Logger,
+	allowedOrigins []string,
+	services map[string]auth.ServiceCred,
+	realm string,
+	whitelist *ipwhitelist.Bundle,
+	floodEng *flood.Engine,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		path := r.URL.Path
 		targetHost := requestTargetHost(r)
+		now := time.Now().UTC()
+		clientIP := flood.ClientIP(r)
 
 		// Exact-path gate: ServeMux "/" is a catch-all; reject other paths with 404.
 		if path != "/" && path != "/auth" {
@@ -43,19 +63,51 @@ func authProbe(logger *log.Logger, allowedOrigins []string, services map[string]
 			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", "", "no_service")
 			return
 		}
+		serviceHint := matched[0].Name
+
+		// Ban check before whitelist/auth. Permanent bans short-circuit;
+		// temp bans still record flood failures inside CheckBan.
+		if floodEng != nil {
+			ban, blocked := floodEng.CheckBan(w, r, serviceHint, now)
+			if blocked {
+				reason := "temp_banned"
+				if ban.Permanent {
+					reason = "banned"
+				}
+				logAuthEvent(logger, http.StatusForbidden, path, targetHost, serviceHint, "", reason)
+				return
+			}
+		}
+
+		// Temporary IP whitelist: skip Basic auth for remembered clients.
+		if whitelist != nil && clientIP != "" && whitelist.Contains(clientIP, now) {
+			w.WriteHeader(http.StatusOK)
+			logAuthEvent(logger, http.StatusOK, path, targetHost, serviceHint, "", "whitelisted")
+			return
+		}
 
 		username, password, ok := r.BasicAuth()
 		if !ok {
+			if floodEng != nil && clientIP != "" {
+				floodEng.RecordFailure(clientIP, serviceHint, now)
+			}
 			unauthorized(w, realm)
-			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", "", "no_credentials")
+			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, serviceHint, "", "no_credentials")
 			return
 		}
 
 		cred, ok := auth.CheckBasicAuthAgainstServices(matched, username, password)
 		if !ok {
+			if floodEng != nil && clientIP != "" {
+				floodEng.RecordFailure(clientIP, serviceHint, now)
+			}
 			unauthorized(w, realm)
-			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", username, "auth_failed")
+			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, serviceHint, username, "auth_failed")
 			return
+		}
+
+		if whitelist != nil && clientIP != "" {
+			whitelist.UpsertNow(clientIP)
 		}
 
 		w.Header().Set("Remote-User", cred.Username)
