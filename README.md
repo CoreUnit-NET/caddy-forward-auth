@@ -43,6 +43,7 @@ It verifies HTTP Basic credentials against per-service bcrypt hashes and only th
 - **Origin allowlist**: Optional `ALLOWED_ORIGINS` CSV restricts browser `Origin` hostnames. Requests without an `Origin` header (typical for Caddy probes) are allowed.
 - **Target host resolution**: The protected host is taken from `X-Forwarded-Host` (first value if CSV), falling back to the request `Host`.
 - **Startup checks**: Boot fails when no `SERVICE_*` entries are configured or when a password hash is not valid bcrypt.
+- **Auth event logs**: Every probe logs a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords).
 
 ## Out of scope
 
@@ -57,7 +58,8 @@ It verifies HTTP Basic credentials against per-service bcrypt hashes and only th
 - Keep this process on a **private network** (or localhost) reachable by Caddy only. Do not publish the auth port to the internet.
 - Trust `X-Forwarded-Host` / `Host` only in that trusted path. Direct public exposure lets clients pick which service glob they authenticate against.
 - When `ALLOWED_ORIGINS` is set, missing `Origin` is still allowed (needed for typical `forward_auth` probes).
-- `--verbose` / `VERBOSE` logs hostnames and usernames; leave it off in production unless debugging.
+- Short auth event logs always include hostnames and usernames (not passwords).
+- `--verbose` / `VERBOSE` additionally dumps every registered service on startup **including password hashes**, plus allowed origins. Use only while debugging on a private network.
 - Put secrets in `.env` (loaded automatically if present) or your secret manager; never commit real password hashes.
 
 ## Usage with Caddy
@@ -97,7 +99,7 @@ Additional commands: `serve`, `version` (also `-v` / `--version`).
 
 | Flag                | Env Var           | Type | Default   | Description |
 | ------------------- | ----------------- | ---- | --------- | ----------- |
-| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Enable verbose request logging |
+| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup |
 | `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address |
 | `--port`            | `PORT`            | int  | `8080`    | Listen port |
 | `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames. When set, other origins are rejected with `403`. Empty disables origin enforcement |

@@ -12,60 +12,75 @@ import (
 // Only exact "/" and "/auth" paths are accepted (README contract).
 // A single "/" registration is used because Go's "/" pattern is a catch-all;
 // the in-handler path gate rejects every other path with 404.
-func NewHandler(logger *log.Logger, verbose bool, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.Handler {
+func NewHandler(logger *log.Logger, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", authProbe(logger, verbose, allowedOrigins, services, realm))
+	mux.HandleFunc("/", authProbe(logger, allowedOrigins, services, realm))
 	return mux
 }
 
-func authProbe(logger *log.Logger, verbose bool, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.HandlerFunc {
+func authProbe(logger *log.Logger, allowedOrigins []string, services map[string]auth.ServiceCred, realm string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		targetHost := requestTargetHost(r)
+
 		// Exact-path gate: ServeMux "/" is a catch-all; reject other paths with 404.
-		if r.URL.Path != "/" && r.URL.Path != "/auth" {
+		if path != "/" && path != "/auth" {
 			http.NotFound(w, r)
+			logAuthEvent(logger, http.StatusNotFound, path, targetHost, "", "", "not_found")
 			return
 		}
 
 		origin := r.Header.Get("Origin")
 		if !auth.OriginAllowed(origin, allowedOrigins) {
-			if verbose {
-				logger.Printf("origin rejected: %q", origin)
-			}
 			http.Error(w, "origin not allowed", http.StatusForbidden)
+			logAuthEvent(logger, http.StatusForbidden, path, targetHost, "", "", "origin")
 			return
 		}
 
-		targetHost := requestTargetHost(r)
 		matched := auth.FindServicesForHost(services, targetHost)
 		if len(matched) == 0 {
-			if verbose {
-				logger.Printf("no service for host %q", targetHost)
-			}
 			unauthorized(w, realm)
+			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", "", "no_service")
 			return
 		}
 
 		username, password, ok := r.BasicAuth()
 		if !ok {
 			unauthorized(w, realm)
+			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", "", "no_credentials")
 			return
 		}
 
 		cred, ok := auth.CheckBasicAuthAgainstServices(matched, username, password)
 		if !ok {
-			if verbose {
-				logger.Printf("basic auth failed for host %q user %q", targetHost, username)
-			}
 			unauthorized(w, realm)
+			logAuthEvent(logger, http.StatusUnauthorized, path, targetHost, "", username, "auth_failed")
 			return
 		}
 
-		if verbose {
-			logger.Printf("authorized host %q user %q", targetHost, cred.Username)
-		}
 		w.Header().Set("Remote-User", cred.Username)
 		w.WriteHeader(http.StatusOK)
+		logAuthEvent(logger, http.StatusOK, path, targetHost, cred.Name, cred.Username, "ok")
 	}
+}
+
+func logAuthEvent(logger *log.Logger, status int, path, host, service, user, reason string) {
+	logger.Printf(
+		"auth status=%d path=%s host=%s service=%s user=%s reason=%s",
+		status,
+		dashIfEmpty(path),
+		dashIfEmpty(host),
+		dashIfEmpty(service),
+		dashIfEmpty(user),
+		dashIfEmpty(reason),
+	)
+}
+
+func dashIfEmpty(value string) string {
+	if value == "" {
+		return "-"
+	}
+	return value
 }
 
 func requestTargetHost(r *http.Request) string {

@@ -51,7 +51,7 @@ func TestLoadServicesFromEnv(t *testing.T) {
 	}
 
 	testCred := services["test"]
-	if testCred.HostGlob != "test.example.com" || testCred.Username != "tester" {
+	if testCred.Name != "test" || testCred.HostGlob != "test.example.com" || testCred.Username != "tester" {
 		t.Fatalf("SERVICE_test = %#v", testCred)
 	}
 	if _, err := bcrypt.Cost([]byte(testCred.PasswordHash)); err != nil {
@@ -124,5 +124,22 @@ func TestParseServiceValueKeepsHashSlashes(t *testing.T) {
 	}
 	if cred.PasswordHash != "$2a$14$abc/def/ghi" {
 		t.Fatalf("hash = %q", cred.PasswordHash)
+	}
+}
+
+func TestSortedServiceNames(t *testing.T) {
+	names := SortedServiceNames(map[string]ServiceCred{
+		"zeta":  {},
+		"alpha": {},
+		"mid":   {},
+	})
+	want := []string{"alpha", "mid", "zeta"}
+	if len(names) != len(want) {
+		t.Fatalf("len = %d, want %d", len(names), len(want))
+	}
+	for i := range want {
+		if names[i] != want[i] {
+			t.Fatalf("names = %v, want %v", names, want)
+		}
 	}
 }

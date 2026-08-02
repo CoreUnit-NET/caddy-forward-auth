@@ -3,6 +3,7 @@ package auth
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"golang.org/x/crypto/bcrypt"
@@ -12,6 +13,7 @@ const serviceEnvPrefix = "SERVICE_"
 
 // ServiceCred is one SERVICE_* entry: host glob, username, and bcrypt password hash.
 type ServiceCred struct {
+	Name         string
 	HostGlob     string
 	Username     string
 	PasswordHash string
@@ -51,6 +53,7 @@ func LoadServicesFromEnv() (map[string]ServiceCred, error) {
 				other,
 			)
 		}
+		cred.Name = name
 		usernames[cred.Username] = name
 		services[name] = cred
 	}
@@ -58,6 +61,16 @@ func LoadServicesFromEnv() (map[string]ServiceCred, error) {
 		return nil, fmt.Errorf("no SERVICE_* entries configured")
 	}
 	return services, nil
+}
+
+// SortedServiceNames returns service map keys in ascending order.
+func SortedServiceNames(services map[string]ServiceCred) []string {
+	names := make([]string, 0, len(services))
+	for name := range services {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 func validatePasswordHash(envKey, hash string) error {

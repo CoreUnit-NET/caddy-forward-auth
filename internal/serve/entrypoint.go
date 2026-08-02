@@ -38,21 +38,32 @@ func Run(logger *log.Logger, shortName string, appConfig *config.AppConfig) erro
 		)
 	}
 	if appConfig.Verbose {
-		for name, cred := range services {
-			logger.Printf("service %s -> hostGlob=%s user=%s", name, cred.HostGlob, cred.Username)
-		}
-		for _, origin := range origins {
-			logger.Printf("allowed origin %s", origin)
-		}
+		logVerboseConfig(logger, services, origins)
 	}
 
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           NewHandler(logger, appConfig.Verbose, origins, services, shortName),
+		Handler:           NewHandler(logger, origins, services, shortName),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		WriteTimeout:      10 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
 	return server.ListenAndServe()
+}
+
+func logVerboseConfig(logger *log.Logger, services map[string]auth.ServiceCred, origins []string) {
+	for _, name := range auth.SortedServiceNames(services) {
+		cred := services[name]
+		logger.Printf(
+			"service %s -> hostGlob=%s user=%s passwordHash=%s",
+			name,
+			cred.HostGlob,
+			cred.Username,
+			cred.PasswordHash,
+		)
+	}
+	for _, origin := range origins {
+		logger.Printf("allowed origin %s", origin)
+	}
 }

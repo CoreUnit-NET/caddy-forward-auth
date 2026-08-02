@@ -1,11 +1,13 @@
 package serve
 
 import (
+	"bytes"
 	"encoding/base64"
 	"io"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"golang.org/x/crypto/bcrypt"
@@ -35,11 +37,13 @@ func testServices(t *testing.T) map[string]auth.ServiceCred {
 	t.Helper()
 	return map[string]auth.ServiceCred{
 		"test": {
+			Name:         "test",
 			HostGlob:     "test.example.com",
 			Username:     "tester",
 			PasswordHash: mustHash(t, "secret"),
 		},
 		"intern": {
+			Name:         "intern",
 			HostGlob:     "*.intern.example.com",
 			Username:     "intern-user",
 			PasswordHash: mustHash(t, "intern-secret"),
@@ -49,7 +53,14 @@ func testServices(t *testing.T) map[string]auth.ServiceCred {
 
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
-	return NewHandler(testLogger(t), false, testOrigins(), testServices(t), "test-realm")
+	return NewHandler(testLogger(t), testOrigins(), testServices(t), "test-realm")
+}
+
+func testHandlerWithLog(t *testing.T) (http.Handler, *bytes.Buffer) {
+	t.Helper()
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	return NewHandler(logger, testOrigins(), testServices(t), "test-realm"), &buf
 }
 
 func basicHeader(user, pass string) string {
@@ -58,7 +69,7 @@ func basicHeader(user, pass string) string {
 }
 
 func TestAuthProbeSuccess(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Host = "auth.local"
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -74,10 +85,11 @@ func TestAuthProbeSuccess(t *testing.T) {
 	if got := rr.Header().Get("Remote-User"); got != "tester" {
 		t.Fatalf("Remote-User = %q, want tester", got)
 	}
+	assertAuthLog(t, buf.String(), "status=200", "path=/auth", "host=test.example.com", "service=test", "user=tester", "reason=ok")
 }
 
 func TestAuthProbeUnauthorized(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "wrong"))
@@ -90,10 +102,11 @@ func TestAuthProbeUnauthorized(t *testing.T) {
 	if rr.Header().Get("WWW-Authenticate") == "" {
 		t.Fatal("expected WWW-Authenticate header")
 	}
+	assertAuthLog(t, buf.String(), "status=401", "path=/auth", "host=test.example.com", "user=tester", "reason=auth_failed")
 }
 
 func TestAuthProbeOriginRejected(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -104,10 +117,11 @@ func TestAuthProbeOriginRejected(t *testing.T) {
 	if rr.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", rr.Code)
 	}
+	assertAuthLog(t, buf.String(), "status=403", "reason=origin")
 }
 
 func TestAuthProbeWildcardHost(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-Forwarded-Host", "api.intern.example.com")
 	req.Header.Set("Authorization", basicHeader("intern-user", "intern-secret"))
@@ -117,10 +131,11 @@ func TestAuthProbeWildcardHost(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200; body=%s", rr.Code, rr.Body.String())
 	}
+	assertAuthLog(t, buf.String(), "status=200", "path=/", "service=intern", "user=intern-user", "reason=ok")
 }
 
 func TestAuthProbeNoMatchingService(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "unknown.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -130,10 +145,11 @@ func TestAuthProbeNoMatchingService(t *testing.T) {
 	if rr.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", rr.Code)
 	}
+	assertAuthLog(t, buf.String(), "status=401", "reason=no_service", "service=-")
 }
 
 func TestAuthProbeUnknownPathNotFound(t *testing.T) {
-	h := testHandler(t)
+	h, buf := testHandlerWithLog(t)
 	req := httptest.NewRequest(http.MethodGet, "/foo", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -142,5 +158,52 @@ func TestAuthProbeUnknownPathNotFound(t *testing.T) {
 	h.ServeHTTP(rr, req)
 	if rr.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "status=404", "path=/foo", "reason=not_found")
+}
+
+func TestAuthProbeNoCredentials(t *testing.T) {
+	h, buf := testHandlerWithLog(t)
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "status=401", "reason=no_credentials", "user=-")
+}
+
+func TestLogVerboseConfigIncludesPasswordHash(t *testing.T) {
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	services := testServices(t)
+	logVerboseConfig(logger, services, []string{"localhost"})
+
+	out := buf.String()
+	if !strings.Contains(out, "passwordHash=") {
+		t.Fatalf("expected passwordHash in verbose dump, got: %s", out)
+	}
+	if !strings.Contains(out, "service intern ->") || !strings.Contains(out, "service test ->") {
+		t.Fatalf("expected sorted service lines, got: %s", out)
+	}
+	if !strings.Contains(out, "allowed origin localhost") {
+		t.Fatalf("expected allowed origin line, got: %s", out)
+	}
+	// Ensure hashes from both services appear (not redacted).
+	for _, cred := range services {
+		if !strings.Contains(out, cred.PasswordHash) {
+			t.Fatalf("expected hash %q in verbose dump", cred.PasswordHash)
+		}
+	}
+}
+
+func assertAuthLog(t *testing.T, got string, wantParts ...string) {
+	t.Helper()
+	for _, part := range wantParts {
+		if !strings.Contains(got, part) {
+			t.Fatalf("auth log missing %q; got: %q", part, got)
+		}
 	}
 }
