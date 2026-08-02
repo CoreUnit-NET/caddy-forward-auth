@@ -13,7 +13,6 @@ const helpURL = "https://github.com/CoreUnit-NET/intern-auth-gateway"
 type AppConfig struct {
 	Verbose     bool
 	ShowVersion bool
-	Subcommand  string
 
 	Host           string
 	Port           int
@@ -41,13 +40,11 @@ func versionCommand(appConfig *AppConfig) *cobra.Command {
 	}
 }
 
-func serveCommand(appConfig *AppConfig) *cobra.Command {
+func serveCommand() *cobra.Command {
 	return &cobra.Command{
 		Use:   "serve",
 		Short: "Start the HTTP server",
-		Run: func(cmd *cobra.Command, args []string) {
-			appConfig.Subcommand = "serve"
-		},
+		Run:   func(cmd *cobra.Command, args []string) {},
 	}
 }
 
@@ -95,9 +92,7 @@ func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 		Short: short,
 		Long: short + "\n" +
 			"Running without a subcommand starts the HTTP server (same as '" + shortName + " serve').",
-		Run: func(cmd *cobra.Command, args []string) {
-			appConfig.Subcommand = "serve"
-		},
+		Run: func(cmd *cobra.Command, args []string) {},
 	}
 
 	rootCmd.PersistentFlags().BoolVarP(&appConfig.Verbose, "verbose", "b", appConfig.Verbose, "enable verbose mode (VERBOSE)")
@@ -111,7 +106,7 @@ func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 
 	rootCmd.AddCommand(
 		versionCommand(appConfig),
-		serveCommand(appConfig),
+		serveCommand(),
 	)
 
 	// wanted behavior: shows an error when using the "help" subcommand and does not execute
@@ -131,10 +126,6 @@ func ParseConfig(displayName, shortName string) (*AppConfig, error) {
 
 	if appConfig.Verbose {
 		fmt.Fprintln(os.Stderr, "Verbose mode enabled")
-	}
-
-	if appConfig.Subcommand == "" {
-		appConfig.Subcommand = "serve"
 	}
 
 	return appConfig, nil

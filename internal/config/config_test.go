@@ -39,12 +39,9 @@ func TestParseConfigDefaults(t *testing.T) {
 	if cfg.AllowedOrigins != "" {
 		t.Fatalf("AllowedOrigins = %q, want empty", cfg.AllowedOrigins)
 	}
-	if cfg.Subcommand != "serve" {
-		t.Fatalf("Subcommand = %q, want serve", cfg.Subcommand)
-	}
 }
 
-func TestParseConfigBareRootDefaultsToServe(t *testing.T) {
+func TestParseConfigBareRootStartsServer(t *testing.T) {
 	oldArgs := os.Args
 	t.Cleanup(func() { os.Args = oldArgs })
 	clearConfigEnv(t)
@@ -54,8 +51,11 @@ func TestParseConfigBareRootDefaultsToServe(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseConfig: %v", err)
 	}
-	if cfg.Subcommand != "serve" {
-		t.Fatalf("Subcommand = %q, want serve", cfg.Subcommand)
+	if cfg.ShowVersion {
+		t.Fatal("bare root must not set ShowVersion")
+	}
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("Host = %q, want defaults on bare root", cfg.Host)
 	}
 }
 
