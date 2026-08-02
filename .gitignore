@@ -25,5 +25,4 @@ tmp
 .tmp
 .env
 intern-auth-gateway.jsonc
-
-
+data
