@@ -7,9 +7,17 @@
 ![](https://img.shields.io/badge/dynamic/json?color=yellow&label=stars&query=stargazers_count&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 ![](https://img.shields.io/badge/dynamic/json?color=navy&label=forks&query=forks&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 
-caddy-forward-auth is a small HTTP auth service for Caddy `forward_auth`.
-It verifies HTTP Basic credentials against per-service bcrypt hashes and only then lets Caddy allow access to the protected upstream hosts.
-After a successful login it can temporarily whitelist the client IP so browsers do not need to resend Basic auth on every request.
+**caddy-forward-auth** is a small companion process for [Caddy](https://caddyserver.com/) `forward_auth`.
+Caddy keeps TLS, routing, and reverse-proxying; this service only answers the auth probes (`/` and `/auth`) and tells Caddy whether the client may reach a protected host.
+
+Configure one or more `SERVICE_*` entries (host glob + username + bcrypt password hash).
+On each probe the service resolves the target host (`X-Forwarded-Host` / `Host`), matches a service entry, and checks HTTP Basic credentials.
+A successful login returns `200` (and `Remote-User`); failures return `401` with a Basic challenge.
+After a success the client IP can stay temporarily whitelisted (default 48h, no cookies/sessions) so browsers are not prompted again on every request.
+Repeated failed attempts are flood-tracked and can escalate into temporary or permanent IP bans.
+
+Run it on a private network (or localhost) reachable only by Caddy—not on the public internet.
+State for whitelist, flood events, and bans is persisted under `./data/` by default.
 
 # Table of Contents
 
@@ -23,21 +31,21 @@ After a successful login it can temporarily whitelist the client IP so browsers 
 - [Getting Started](#getting-started)
   - [Requirements](#requirements)
   - [Use via Go](#use-via-go)
-  - [Install via go](#install-via-go)
+  - [Install via Go](#install-via-go)
   - [Install via GitHub release](#install-via-github-release)
 - [Build](#build)
   - [Build requirements](#build-requirements)
-  - [Build Instructions](#build-instructions)
+  - [Build instructions](#build-instructions)
 - [Development](#development)
 - [Docker](#docker)
-- [Install go](#install-go)
+- [Install Go](#install-go)
 - [Contributing](#contributing)
-- [License](#license)
+- [Licence](#licence)
 - [Disclaimer](#disclaimer)
 
 ## Features
 
-- **Caddy `forward_auth` endpoint**: Exposes exact paths `/` and `/auth` for Caddy `forward_auth` probes. Successful checks return `200` and set `Remote-User`; failures return `401` with a Basic challenge (or `403` for blocked origins). Other paths return `404`.
+- **Caddy `forward_auth` endpoint**: Exposes exact paths `/` and `/auth` for Caddy `forward_auth` probes. Successful Basic checks return `200` and set `Remote-User`; failures return `401` with a Basic challenge (or `403` for blocked origins). Other paths return `404`.
 - **HTTP Basic authentication**: Credentials are verified against bcrypt password hashes configured per service.
 - **Per-service auth routing**: Each `SERVICE_*` entry maps a host pattern to its own username and password hash, so different upstream hosts can require different credentials.
 - **Host glob matching**: Case-insensitive. `*` matches one DNS label (for example `*.intern.example.com` matches `api.intern.example.com`, but not `a.b.intern.example.com`). Bare `*` matches any non-empty host. Ports in the request host are ignored.
@@ -45,17 +53,17 @@ After a successful login it can temporarily whitelist the client IP so browsers 
 - **Target host resolution**: The protected host is taken from `X-Forwarded-Host` (first value if CSV), falling back to the request `Host`.
 - **Startup checks**: Boot fails when no `SERVICE_*` entries are configured or when a password hash is not valid bcrypt.
 - **Auth event logs**: Every probe logs a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords).
-- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h) so follow-up probes succeed without a new password prompt (`reason=whitelisted`). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
+- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h) so follow-up probes succeed without a new password prompt (`reason=whitelisted`). Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
 - **Flood prevention**: Failed Basic attempts (`no_credentials`, `auth_failed`) are tracked per client IP. Escalating thresholds create temporary or permanent IP bans (`403`, `reason=banned` / `temp_banned`). State lives in `./data/flood.json` and `./data/ban.json`.
 
 ## Out of scope
 
-- **TLS / HTTPS**: Terminate TLS in front of this service (for example with Caddy). The gateway itself listens on plain HTTP.
+- **TLS / HTTPS**: Terminate TLS in front of this service (for example with Caddy). The process itself listens on plain HTTP.
 - **Cookie / session login**: No browser cookies or server sessions. Temporary IP whitelisting is used instead of a session store.
 - **Non-Basic auth**: OAuth, OIDC, API keys, mTLS, and similar methods are not supported.
 - **Reverse-proxy duties**: This process only answers auth probes. Upstream proxying, routing, and TLS remain Caddy’s responsibility.
 - **Non-Caddy gatekeeping**: The handler is built for Caddy `forward_auth`. Other proxy auth protocols are not a goal.
-- **Additional rate limiting beyond built-in flood bans**: Network placement and Caddy remain the first line of defense; this process only applies the fixed flood thresholds above.
+- **Additional rate limiting beyond built-in flood bans**: Network placement and Caddy remain the first line of defence; this process only applies the fixed flood thresholds above.
 
 ## Security notes
 
@@ -65,7 +73,8 @@ After a successful login it can temporarily whitelist the client IP so browsers 
 - Short auth event logs always include hostnames and usernames (not passwords).
 - `--verbose` / `VERBOSE` additionally dumps every registered service on startup **including password hashes**, plus allowed origins. Use only while debugging on a private network.
 - Put secrets in `.env` (loaded automatically if present) or your secret manager; never commit real password hashes.
-- The temporary IP whitelist file (`./data/ipwhitelist.json` by default) and flood/ban files (`./data/flood.json`, `./data/ban.json`) trust client IPs as seen via `X-Forwarded-For` / `X-Real-IP` / `RemoteAddr`—keep the gateway on a private network behind Caddy so those addresses are meaningful.
+- The temporary IP whitelist file (`./data/ipwhitelist.json` by default) and flood/ban files (`./data/flood.json`, `./data/ban.json`) trust client IPs as seen via `X-Forwarded-For` / `X-Real-IP` / `RemoteAddr`—keep the service on a private network behind Caddy so those addresses are meaningful.
+- Whitelist `200` responses omit `Remote-User`; only a successful Basic login sets that header for Caddy `copy_headers`.
 - Flood thresholds (per IP): 10 failures / 2m → 3m ban; 60 / 30m → 2h ban; 90 / 60m, 120 / 6h, or 240 / 168h → permanent ban. Temp-banned clients still accumulate flood events.
 
 ## Usage with Caddy
@@ -88,8 +97,8 @@ intern-auth.example.com {
 
 Flow:
 
-1. Caddy sends an internal auth probe to this gateway (`/` or `/auth`).
-2. On `200`, Caddy allows the client request and may forward `Remote-User`.
+1. Caddy sends an internal auth probe to this service (`/` or `/auth`).
+2. On `200`, Caddy allows the client request and may forward `Remote-User` when the probe set it (Basic success only; whitelist hits omit it).
 3. On `401`/`403`, Caddy denies access.
 
 ## Configuration
@@ -143,11 +152,13 @@ SERVICE_intern="*.intern.example.com/intern-user/$2a$14$54tdWftb4iOouKyfDyURPuI6
 
 See `sample.env` for a copy-paste template.
 
+When using Docker Compose (or any tool that interpolates `$…` in env files), escape each `$` in bcrypt hashes as `$$` so the hash is not truncated or altered.
+
 ## Getting Started
 
 ### Requirements
 
-Linux- or macos-like systems with:
+Unix-like systems (Linux, FreeBSD, MacOS) with:
 
 - `go` **or** `wget` & `tar` (to run/install the caddy-forward-auth binary)
 
@@ -165,9 +176,9 @@ Start with defaults (same as `serve`):
 go run github.com/CoreUnit-NET/caddy-forward-auth@latest
 ```
 
-### Install via go
+### Install via Go
 
-###### _For this section go is required, check out the [install go guide](#install-go)._
+###### _For this section Go is required, check out the [install Go guide](#install-go)._
 
 ```sh
 go install github.com/CoreUnit-NET/caddy-forward-auth@latest
@@ -185,16 +196,16 @@ tar -xzvf caddy-forward-auth_linux_amd64.tar.gz -C "$CUSTOM_BIN_DIR" caddy-forwa
 chmod +x "$CUSTOM_BIN_DIR/caddy-forward-auth"
 ```
 
-# Build
+## Build
 
-## Build requirements
+### Build requirements
 
-To build, you need to install go.
-The required go version is in the `go.mod` file.
+To build, you need to install Go.
+The required Go version is in the `go.mod` file.
 
-## Build Instructions
+### Build instructions
 
-###### _For this section go is required, check out the [install go guide](#install-go)._
+###### _For this section Go is required, check out the [install Go guide](#install-go)._
 
 Clone the repo:
 
@@ -210,9 +221,9 @@ make build
 ./bin
 ```
 
-# Development
+## Development
 
-###### _For this section go is required, check out the [install go guide](#install-go)._
+###### _For this section Go is required, check out the [install Go guide](#install-go)._
 
 Auto-reload via [Air](https://github.com/air-verse/air) (installs the tool if needed):
 
@@ -222,12 +233,12 @@ make dev
 
 Useful make targets: `make test`, `make build`, `make cover`.
 
-# Docker
+## Docker
 
 Docker Compose services:
 
 - `local` — Air reload with the repo mounted
-- `deploy` — built runtime image
+- `deploy` — built runtime image (persists whitelist/flood/ban state via a `./data` bind mount)
 - `lint` — golangci-lint
 
 ```sh
@@ -237,11 +248,15 @@ make docker/run  # run with Air and published ports
 
 Compose publishes `127.0.0.1:${PORT:-8080}` on the host to container port `8080`, and forces `PORT=8080` inside the container so the app listen port stays aligned.
 
-## Install go
+The `deploy` service mounts `./data` into the container so `./data/ipwhitelist.json`, `./data/flood.json`, and `./data/ban.json` survive restarts. Ensure the host directory is writable by container uid `10000`.
 
-The required go version for this project is in the `go.mod` file.
+If bcrypt hashes live in Compose-managed env files, escape `$` as `$$` (see [Services](#services)).
 
-To install and update go, I can recommend the following repo:
+### Install Go
+
+The required Go version for this project is in the `go.mod` file.
+
+To install and update Go, I can recommend the following repo:
 
 ```sh
 git clone git@github.com:udhos/update-golang.git golang-updater
@@ -249,16 +264,16 @@ cd golang-updater
 sudo ./update-golang.sh
 ```
 
-# Contributing
+## Contributing
 
 Contributions to this project are welcome!  
 Interested users can refer to the guidelines provided in the [CONTRIBUTING.md](CONTRIBUTING.md) file to contribute to the project and help improve its functionality and features.
 
-# License
+## Licence
 
-This project is licensed under the [MIT license](LICENSE), providing users with flexibility and freedom to use and modify the software according to their needs.
+This project is licensed under the [MIT licence](LICENSE), providing users with flexibility and freedom to use and modify the software according to their needs.
 
-# Disclaimer
+## Disclaimer
 
 This project is provided without warranties.  
-Users are advised to review the accompanying license for more information on the terms of use and limitations of liability.
+Users are advised to review the accompanying licence for more information on the terms of use and limitations of liability.
