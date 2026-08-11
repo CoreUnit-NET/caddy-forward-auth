@@ -43,7 +43,6 @@ HOST ?= 0.0.0.0
 GOOS ?= $(shell go env GOOS)
 GOARCH ?= $(shell go env GOARCH)
 GOCACHE ?= $(shell if [ -d "$$(go env GOCACHE)" ]; then realpath "$$(go env GOCACHE)"; else mkdir -p .tmp/.cache/go-build && realpath ".tmp/.cache/go-build"; fi)
-CACHE_DIR ?= $(GOCACHE)
 
 ##@ These environment variables control various project configurations, including build, run, and deployment settings.
 ##@ They are loaded from the `.env.project` file and overwrite the `.env` file variables.
@@ -88,11 +87,9 @@ CACHE_DIR ?= $(GOCACHE)
 ##@: default build system os
 ##@ GOARCH: target build architecture,
 ##@: default build system arch
-##@ GOCACHE: container go cache dir,
+##@ GOCACHE: host go cache path for local (non-compose) builds,
 ##@: default global go cache if is dir
 ##@: else creates .tmp/.cache/go-build
-##@ CACHE_DIR: host dir mounted as go-build cache in docker,
-##@: default is $GOCACHE
 
 ##@
 ##@ Misc commands
@@ -173,62 +170,6 @@ build: ##@ uses go to build the app with build args
 		-o bin
 	@chmod +x bin
 
-.PHONY: buildall
-buildall: ##@ cross-compilation for all GOOS/GOARCH combinations
-	@echo "Prepare..."
-	@echo "Selected operating systems: $(PROJECT_BUILDALL_OS)"
-	@echo "Selected architectures: $(PROJECT_BUILDALL_ARCH)"
-	@set -- $(PROJECT_BUILDALL_OS) && \
-	OS_ARRAY=$$@ && \
-	set -- $(PROJECT_BUILDALL_ARCH) && \
-	ARCH_ARRAY=$$@ && \
-	set -- $$(go tool dist list | tr '\n' ' ') && \
-	TARGET_ARRAY=$$@ && \
-	FILTERED_TARGETS="" && \
-	for target in $$TARGET_ARRAY; do \
-	  target_os=$$(echo $$target | cut -d '/' -f1); \
-	  target_arch=$$(echo $$target | cut -d '/' -f2); \
-	  if [ -z "$$PROJECT_BUILDALL_OS" ] || echo "$$OS_ARRAY" | grep -qw "$$target_os"; then \
-	    if [ -z "$$PROJECT_BUILDALL_ARCH" ] || echo "$$ARCH_ARRAY" | grep -qw "$$target_arch"; then \
-	      FILTERED_TARGETS="$$FILTERED_TARGETS $$target"; \
-	    fi; \
-	  fi; \
-	done && \
-	FILTERED_TARGETS=$${FILTERED_TARGETS#?} && \
-	if [ -z "$$FILTERED_TARGETS" ]; then \
-	  echo "Error: No matching targets found for the selected OS and architectures"; \
-	  echo "- os: $$PROJECT_BUILDALL_OS"; \
-	  echo "- arch: $$PROJECT_BUILDALL_ARCH"; \
-	  echo "- targets: $$TARGET_ARRAY"; \
-	  exit 1; \
-	fi  && \
-	echo "\nBuild for targets:\n$$FILTERED_TARGETS" && \
-	rm -rf .tmp/out-bak && \
-	mv .tmp/out .tmp/out-bak || true && \
-	echo "\nRun test build-system build..." && \
-	make -s build || { echo "Test system-build build failed!"; exit 1; } && \
-	echo "Start build processes..." && \
-	for target in $$FILTERED_TARGETS; do \
-		GOOS=$$(echo $$target | cut -d'/' -f1) && \
-			GOARCH=$$(echo $$target | cut -d'/' -f2) && \
-		( \
-			go build \
-				-ldflags=$(PROJECT_BUILD_ARGS) \
-				-o .tmp/out/$(PROJECT_SHORT_NAME)-$$GOOS-$$GOARCH && \
-			chmod +x .tmp/out/$(PROJECT_SHORT_NAME)-$$GOOS-$$GOARCH \
-		) && echo "- $$GOOS/$$GOARCH build!" || { echo "Build failed for $$GOOS/$$GOARCH!"; exit 1; } & \
-	done && \
-	wait
-	@echo "All build processes finished."
-
-.PHONY: gi
-gi: ##@ installs the build binary globally
-	@sudo cp bin /usr/local/bin/$(PROJECT_SHORT_NAME)
-
-.PHONY: gu
-gu: ##@ uninstalls the build binary globally
-	@sudo rm -f /usr/local/bin/$(PROJECT_SHORT_NAME)
-
 .PHONY: up
 up: ##@ updates dependencies recursively using go get
 	@echo "Update go deps recursively..."
@@ -271,14 +212,21 @@ dev: ##@ runs the app in watch mode
 .PHONY: docker
 docker: ##@ runs a shell in the container
 	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
-	docker compose run -P --rm -it --build \
+	docker compose run -P --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME) \
-		--entrypoint bash \
+		-e INIT_CMD="bash" \
 		local
 
-.PHONY: docker/run
-docker/run: ##@ runs caddy-forward-auth in docker via air (mounted source)
-	@docker rm -f dev-$(PROJECT_SHORT_NAME)-run > /dev/null 2>&1 || true
+.PHONY: docker/dev
+docker/dev: ##@ runs app in docker via air
+	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
 	docker compose run --rm -it --build --service-ports \
-		--name dev-$(PROJECT_SHORT_NAME)-run \
+		--name dev-$(PROJECT_SHORT_NAME) \
 		local
+
+.PHONY: docker/deploy
+docker/deploy: ##@ runs app in docker in a fresh environment
+	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
+	docker compose run --rm -it --build --service-ports \
+		--name dev-$(PROJECT_SHORT_NAME) \
+		deploy
