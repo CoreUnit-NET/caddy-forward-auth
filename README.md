@@ -28,20 +28,14 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - [Configuration](#configuration)
   - [Flags and environment](#flags-and-environment)
   - [Services](#services)
+- [Requirements](#requirements)
 - [Getting Started](#getting-started)
-  - [Requirements](#requirements)
-  - [Use via Go](#use-via-go)
-  - [Install via Go](#install-via-go)
-  - [Install via GitHub release](#install-via-github-release)
-- [Build](#build)
-  - [Build requirements](#build-requirements)
-  - [Build instructions](#build-instructions)
-- [Development](#development)
-- [Docker](#docker)
-- [Install Go](#install-go)
-- [Contributing](#contributing)
-- [Licence](#licence)
-- [Disclaimer](#disclaimer)
+- [Quick help](#quick-help)
+- [Install via go](#install-via-go)
+- [Install via wget](#install-via-wget)
+- [Build requirements](#build-requirements)
+- [Build Instructions](#build-instructions)
+- [Install go](#install-go)
 
 ## Features
 
@@ -112,11 +106,11 @@ Additional commands: `serve`, `version` (also `-v` / `--version`).
 
 ### Flags and environment
 
-| Flag                | Env Var           | Type | Default   | Description                                                                                                    |
-| ------------------- | ----------------- | ---- | --------- | -------------------------------------------------------------------------------------------------------------- |
-| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup                              |
-| `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address                                                                                                 |
-| `--port`            | `PORT`            | int  | `8080`    | Listen port                                                                                                    |
+| Flag                | Env Var           | Type | Default   | Description                                                                                                                                                                               |
+| ------------------- | ----------------- | ---- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `--verbose` / `-b`  | `VERBOSE`         | bool | `false`   | Verbose mode: dump services (with password hashes) and allowed origins at startup                                                                                                         |
+| `--host`            | `HOST`            | str  | `0.0.0.0` | Listen address                                                                                                                                                                            |
+| `--port`            | `PORT`            | int  | `8080`    | Listen port                                                                                                                                                                               |
 | `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames/globs (same rules as `SERVICE_*` hostGlob: exact, `*.example.com`, or `*`). When set, other origins are rejected with `403`. Empty disables origin enforcement |
 
 Quick help:
@@ -154,58 +148,56 @@ See `sample.env` for a copy-paste template.
 
 When using Docker Compose (or any tool that interpolates `$…` in env files), escape each `$` in bcrypt hashes as `$$` so the hash is not truncated or altered.
 
+# User Guide
+
+## Requirements
+
+Linux- or macos-like systems with `go` or `wget & tar` installed.
+
 ## Getting Started
 
-### Requirements
-
-Unix-like systems (Linux, FreeBSD, MacOS) with:
-
-- `go` **or** `wget` & `tar` (to run/install the caddy-forward-auth binary)
-
-### Use via Go
-
-Help and configuration details:
-
-```sh
-go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
-```
-
-Start with defaults (same as `serve`):
+Start the latest repo version directly without leaving stuff in the current working dir:
 
 ```sh
 go run github.com/CoreUnit-NET/caddy-forward-auth@latest
 ```
 
-### Install via Go
+## Quick help
 
-###### _For this section Go is required, check out the [install Go guide](#install-go)._
+```sh
+go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
+```
+
+## Install via go
+
+###### _For this section go is required, check out the [install go guide](#install-go)._
 
 ```sh
 go install github.com/CoreUnit-NET/caddy-forward-auth@latest
 ```
 
-### Install via GitHub release
-
-1. Open the [GitHub Releases](https://github.com/CoreUnit-NET/caddy-forward-auth/releases) page.
-2. Download the archive for your OS/arch (release assets are produced as `caddy-forward-auth_<os>_<arch>.tar.gz`, for example `caddy-forward-auth_linux_amd64.tar.gz`).
-3. Extract the `caddy-forward-auth` binary into your preferred bin directory:
+## Install via wget
 
 ```sh
 export CUSTOM_BIN_DIR="/usr/local/bin" # <- change if needed
-tar -xzvf caddy-forward-auth_linux_amd64.tar.gz -C "$CUSTOM_BIN_DIR" caddy-forward-auth
-chmod +x "$CUSTOM_BIN_DIR/caddy-forward-auth"
+export CUSTOM_VERSION="" # <- set latest version here
+
+rm -rf $CUSTOM_BIN_DIR/caddy-forward-auth
+wget https://github.com/CoreUnit-NET/caddy-forward-auth/releases/download/v$CUSTOM_VERSION/caddy-forward-auth-v$CUSTOM_VERSION-linux-amd64.tar.gz -O /tmp/caddy-forward-auth.tar.gz
+tar -xzvf /tmp/caddy-forward-auth.tar.gz -C $CUSTOM_BIN_DIR/ caddy-forward-auth
+rm /tmp/caddy-forward-auth.tar.gz
 ```
 
-## Build
+# Build
 
-### Build requirements
+## Build requirements
 
-To build, you need to install Go.
-The required Go version is in the `go.mod` file.
+To build, you need to install go.
+The required go version is in the `go.mod` file.
 
-### Build instructions
+## Build Instructions
 
-###### _For this section Go is required, check out the [install Go guide](#install-go)._
+###### _For this section go is required, check out the [install go guide](#install-go)._
 
 Clone the repo:
 
@@ -214,49 +206,28 @@ git clone https://github.com/CoreUnit-NET/caddy-forward-auth.git
 cd caddy-forward-auth
 ```
 
-Build the binary from source (`make build` writes `./bin`):
+Build the caddy-forward-auth binary from source code:
 
 ```sh
 make build
-./bin
+./caddy-forward-auth
 ```
 
-## Development
+# Development
 
-###### _For this section Go is required, check out the [install Go guide](#install-go)._
+###### _For this section go is required, check out the [install go guide](#install-go)._
 
-Auto-reload via [Air](https://github.com/air-verse/air) (installs the tool if needed):
+This part is work in progress, I want to use 'AIR' as auto-reload tool:
 
 ```sh
-make dev
+make dev #WIP
 ```
 
-Useful make targets: `make test`, `make build`, `make cover`.
+## Install go
 
-## Docker
+The required go version for this project is in the `go.mod` file.
 
-Docker Compose services:
-
-- `local` — Air reload with the repo mounted
-- `deploy` — built runtime image (persists whitelist/flood/ban state via a `./data` bind mount)
-- `lint` — golangci-lint
-
-```sh
-make docker      # shell in local image
-make docker/run  # run with Air and published ports
-```
-
-Compose publishes `127.0.0.1:${PORT:-8080}` on the host to container port `8080`, and forces `PORT=8080` inside the container so the app listen port stays aligned.
-
-The `deploy` service mounts `./data` into the container so `./data/ipwhitelist.json`, `./data/flood.json`, and `./data/ban.json` survive restarts. Ensure the host directory is writable by container uid `10000`.
-
-If bcrypt hashes live in Compose-managed env files, escape `$` as `$$` (see [Services](#services)).
-
-### Install Go
-
-The required Go version for this project is in the `go.mod` file.
-
-To install and update Go, I can recommend the following repo:
+To install and update go, I can recommend the following repo:
 
 ```sh
 git clone git@github.com:udhos/update-golang.git golang-updater
@@ -264,16 +235,16 @@ cd golang-updater
 sudo ./update-golang.sh
 ```
 
-## Contributing
+# Contributing
 
 Contributions to this project are welcome!  
 Interested users can refer to the guidelines provided in the [CONTRIBUTING.md](CONTRIBUTING.md) file to contribute to the project and help improve its functionality and features.
 
-## Licence
+# License
 
-This project is licensed under the [MIT licence](LICENSE), providing users with flexibility and freedom to use and modify the software according to their needs.
+This project is licensed under the [MIT license](LICENSE), providing users with flexibility and freedom to use and modify the software according to their needs.
 
-## Disclaimer
+# Disclaimer
 
 This project is provided without warranties.  
-Users are advised to review the accompanying licence for more information on the terms of use and limitations of liability.
+Users are advised to review the accompanying license for more information on the terms of use and limitations of liability.
