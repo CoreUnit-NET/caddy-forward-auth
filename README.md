@@ -2,14 +2,16 @@
 
 # 🔐 caddy-forward-auth
 
+![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-bin-release.yml/badge.svg)
 ![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-test-build.yml/badge.svg)  
-![MIT](https://img.shields.io/badge/license-MIT-blue.svg)
 ![](https://img.shields.io/badge/dynamic/json?color=green&label=watchers&query=watchers&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 ![](https://img.shields.io/badge/dynamic/json?color=yellow&label=stars&query=stargazers_count&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 ![](https://img.shields.io/badge/dynamic/json?color=navy&label=forks&query=forks&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 
 </div>
+
+## About
 
 **caddy-forward-auth** is a small companion process for [Caddy](https://caddyserver.com/) `forward_auth`.
 Caddy keeps TLS, routing, and reverse-proxying; this service only answers the auth probes (`/` and `/auth`) and tells Caddy whether the client may reach a protected host.
@@ -25,7 +27,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 
 <details><summary><strong>Features</strong></summary>
 
-## Features
+### Features
 
 - **Caddy `forward_auth` endpoint**: Exposes exact paths `/` and `/auth` for Caddy `forward_auth` probes. Successful Basic checks return `200` and set `Remote-User`; failures return `401` with a Basic challenge (or `403` for blocked origins). Other paths return `404`.
 - **HTTP Basic authentication**: Credentials are verified against bcrypt password hashes configured per service.
@@ -42,7 +44,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 
 <details><summary><strong>Out of scope</strong></summary>
 
-## Out of scope
+### Out of scope
 
 - **TLS / HTTPS**: Terminate TLS in front of this service (for example with Caddy). The process itself listens on plain HTTP.
 - **Cookie / session login**: No browser cookies or server sessions. Temporary IP whitelisting is used instead of a session store.
@@ -55,7 +57,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 
 <details><summary><strong>Security notes</strong></summary>
 
-## Security notes
+### Security notes
 
 - Keep this process on a **private network** (or localhost) reachable by Caddy only. Do not publish the auth port to the internet.
 - Trust `X-Forwarded-Host` / `Host` only in that trusted path. Direct public exposure lets clients pick which service glob they authenticate against.
