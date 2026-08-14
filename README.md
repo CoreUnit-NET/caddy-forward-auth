@@ -1,4 +1,6 @@
-# caddy-forward-auth
+<div align="center">
+
+# 🔐 caddy-forward-auth
 
 ![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-bin-release.yml/badge.svg)
 ![CI/CD](https://github.com/CoreUnit-NET/caddy-forward-auth/actions/workflows/go-test-build.yml/badge.svg)  
@@ -6,6 +8,8 @@
 ![](https://img.shields.io/badge/dynamic/json?color=green&label=watchers&query=watchers&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 ![](https://img.shields.io/badge/dynamic/json?color=yellow&label=stars&query=stargazers_count&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
 ![](https://img.shields.io/badge/dynamic/json?color=navy&label=forks&query=forks&suffix=x&url=https%3A%2F%2Fapi.github.com%2Frepos%2FCoreUnit-NET%2Fcaddy-forward-auth)
+
+</div>
 
 **caddy-forward-auth** is a small companion process for [Caddy](https://caddyserver.com/) `forward_auth`.
 Caddy keeps TLS, routing, and reverse-proxying; this service only answers the auth probes (`/` and `/auth`) and tells Caddy whether the client may reach a protected host.
