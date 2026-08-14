@@ -23,23 +23,7 @@ Repeated failed attempts are flood-tracked and can escalate into temporary or pe
 Run it on a private network (or localhost) reachable only by Caddy—not on the public internet.
 State for whitelist, flood events, and bans is persisted under `./data/` by default.
 
-# Table of Contents
-
-- [Features](#features)
-- [Out of scope](#out-of-scope)
-- [Security notes](#security-notes)
-- [Usage with Caddy](#usage-with-caddy)
-- [Configuration](#configuration)
-  - [Flags and environment](#flags-and-environment)
-  - [Services](#services)
-- [Requirements](#requirements)
-- [Getting Started](#getting-started)
-- [Quick help](#quick-help)
-- [Install via go](#install-via-go)
-- [Install via wget](#install-via-wget)
-- [Build requirements](#build-requirements)
-- [Build Instructions](#build-instructions)
-- [Install go](#install-go)
+<details><summary><strong>Features</strong></summary>
 
 ## Features
 
@@ -54,6 +38,10 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h) so follow-up probes succeed without a new password prompt (`reason=whitelisted`). Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
 - **Flood prevention**: Failed Basic attempts (`no_credentials`, `auth_failed`) are tracked per client IP. Escalating thresholds create temporary or permanent IP bans (`403`, `reason=banned` / `temp_banned`). State lives in `./data/flood.json` and `./data/ban.json`.
 
+</details>
+
+<details><summary><strong>Out of scope</strong></summary>
+
 ## Out of scope
 
 - **TLS / HTTPS**: Terminate TLS in front of this service (for example with Caddy). The process itself listens on plain HTTP.
@@ -62,6 +50,10 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - **Reverse-proxy duties**: This process only answers auth probes. Upstream proxying, routing, and TLS remain Caddy’s responsibility.
 - **Non-Caddy gatekeeping**: The handler is built for Caddy `forward_auth`. Other proxy auth protocols are not a goal.
 - **Additional rate limiting beyond built-in flood bans**: Network placement and Caddy remain the first line of defence; this process only applies the fixed flood thresholds above.
+
+</details>
+
+<details><summary><strong>Security notes</strong></summary>
 
 ## Security notes
 
@@ -74,6 +66,10 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - The temporary IP whitelist file (`./data/ipwhitelist.json` by default) and flood/ban files (`./data/flood.json`, `./data/ban.json`) trust client IPs as seen via `X-Forwarded-For` / `X-Real-IP` / `RemoteAddr`—keep the service on a private network behind Caddy so those addresses are meaningful.
 - Whitelist `200` responses omit `Remote-User`; only a successful Basic login sets that header for Caddy `copy_headers`.
 - Flood thresholds (per IP): 10 failures / 2m → 3m ban; 60 / 30m → 2h ban; 90 / 60m, 120 / 6h, or 240 / 168h → permanent ban. Temp-banned clients still accumulate flood events.
+
+</details>
+
+<details><summary><strong>Usage with Caddy</strong></summary>
 
 ## Usage with Caddy
 
@@ -98,6 +94,10 @@ Flow:
 1. Caddy sends an internal auth probe to this service (`/` or `/auth`).
 2. On `200`, Caddy allows the client request and may forward `Remote-User` when the probe set it (Basic success only; whitelist hits omit it).
 3. On `401`/`403`, Caddy denies access.
+
+</details>
+
+<details><summary><strong>Configuration</strong></summary>
 
 ## Configuration
 
@@ -151,6 +151,10 @@ SERVICE_intern="*.intern.example.com/intern-user/$2a$14$54tdWftb4iOouKyfDyURPuI6
 See `sample.env` for a copy-paste template.
 
 When using Docker Compose (or any tool that interpolates `$…` in env files), escape each `$` in bcrypt hashes as `$$` so the hash is not truncated or altered.
+
+</details>
+
+<details><summary><strong>User Guide</strong></summary>
 
 # User Guide
 
@@ -217,6 +221,10 @@ make build
 ./caddy-forward-auth
 ```
 
+</details>
+
+<details><summary><strong>Development</strong></summary>
+
 # Development
 
 ###### _For this section go is required, check out the [install go guide](#install-go)._
@@ -238,6 +246,8 @@ git clone git@github.com:udhos/update-golang.git golang-updater
 cd golang-updater
 sudo ./update-golang.sh
 ```
+
+</details>
 
 <div align="center">
 
