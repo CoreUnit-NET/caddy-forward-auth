@@ -22,7 +22,6 @@ go.work
 go.work.sum
 bin
 tmp
-.tmp
 .env
 caddy-forward-auth.jsonc
 data
