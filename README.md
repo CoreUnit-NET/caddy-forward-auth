@@ -150,7 +150,7 @@ SERVICE_test="test.example.com/tester/$2a$14$AnhQELX1cqeO3YaLPOTWtOuPsKZgweRHrYL
 SERVICE_intern="*.intern.example.com/intern-user/$2a$14$54tdWftb4iOouKyfDyURPuI6rOIwcbjqKYfzOqYE0PyOcmVFnU1mM"
 ```
 
-See `sample.env` for a copy-paste template.
+See `.env.sample` for a copy-paste template.
 
 When using Docker Compose (or any tool that interpolates `$…` in env files), escape each `$` in bcrypt hashes as `$$` so the hash is not truncated or altered.
 
