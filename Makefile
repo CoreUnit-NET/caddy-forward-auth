@@ -234,3 +234,11 @@ docker/deploy: ##@ runs app in docker in a fresh environment
 	docker compose run --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME) \
 		deploy
+
+.PHONY: docker/up
+docker/up: ##@ builds and starts deploy service detached in background
+	docker compose up deploy --build -d
+
+.PHONY: docker/down
+docker/down: ##@ stops deploy service and removes containers
+	docker compose down --remove-orphans
