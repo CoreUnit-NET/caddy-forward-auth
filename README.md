@@ -36,9 +36,9 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - **Origin allowlist**: Optional `ALLOWED_ORIGINS` CSV restricts browser `Origin` hostnames. Requests without an `Origin` header (typical for Caddy probes) are allowed.
 - **Target host resolution**: The protected host is taken from `X-Forwarded-Host` (first value if CSV), falling back to the request `Host`.
 - **Startup checks**: Boot fails when no `SERVICE_*` entries are configured or when a password hash is not valid bcrypt.
-- **Auth event logs**: Rejections and errors always log a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords). Successful Basic logins log only when `--verbose` / `VERBOSE` is set. Whitelisted probes are silent.
-- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h). Active whitelist entries are checked **before** ban enforcement and flood counting; each whitelisted probe renews the window. Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
-- **Flood prevention**: Failed Basic attempts (`no_credentials`, `auth_failed`) are tracked per client IP. Escalating thresholds create temporary or permanent IP bans (`403`, `reason=banned` / `temp_banned`). State lives in `./data/flood.json` and `./data/ban.json`.
+- **Auth event logs**: Rejections and errors always log a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords). Successful Basic logins log when `--verbose` / `VERBOSE` or `LOG_AUTH_SUCCESS` is set. Whitelisted probes are silent unless `LOG_WHITELISTED` is set.
+- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a configurable period (default 48h). Active whitelist entries are checked **before** ban enforcement; each whitelisted probe renews the window. By default (`WHITELIST_OVERRIDES_BAN=true`) whitelist bypasses bans and skips flood counting. Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
+- **Flood prevention**: Failed probes can be tracked per client IP and escalate through five configurable tiers into temporary or permanent bans (`403`, `reason=banned` / `temp_banned`). State lives in `./data/flood.json` and `./data/ban.json`. Whitelisted IPs skip flood recording; `auth_failed` always counts when flood is enabled.
 
 </details>
 
@@ -51,7 +51,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - **Non-Basic auth**: OAuth, OIDC, API keys, mTLS, and similar methods are not supported.
 - **Reverse-proxy duties**: This process only answers auth probes. Upstream proxying, routing, and TLS remain Caddy’s responsibility.
 - **Non-Caddy gatekeeping**: The handler is built for Caddy `forward_auth`. Other proxy auth protocols are not a goal.
-- **Additional rate limiting beyond built-in flood bans**: Network placement and Caddy remain the first line of defence; this process only applies the fixed flood thresholds above.
+- **Additional rate limiting beyond built-in flood bans**: Network placement and Caddy remain the first line of defence; this process only applies the configurable flood tiers below.
 
 </details>
 
@@ -67,7 +67,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - Put secrets in `.env` (loaded automatically if present) or your secret manager; never commit real password hashes.
 - The temporary IP whitelist file (`./data/ipwhitelist.json` by default) and flood/ban files (`./data/flood.json`, `./data/ban.json`) trust client IPs as seen via `X-Forwarded-For` / `X-Real-IP` / `RemoteAddr`—keep the service on a private network behind Caddy so those addresses are meaningful.
 - Whitelist `200` responses omit `Remote-User`; only a successful Basic login sets that header for Caddy `copy_headers`.
-- Flood thresholds (per IP): 10 failures / 2m → 3m ban; 60 / 30m → 2h ban; 90 / 60m, 120 / 6h, or 240 / 168h → permanent ban. Whitelisted IPs skip flood recording and ban checks. Non-whitelisted temp-banned clients still accumulate flood events on each blocked probe.
+- Flood tiers (per IP, defaults shown) escalate failed probes into temporary or permanent bans. All five tiers are configurable via env/flags (see **Configuration**). Whitelisted IPs skip flood recording and ban checks when `WHITELIST_OVERRIDES_BAN=true` (default). Non-whitelisted temp-banned clients still accumulate flood events on each blocked probe when `FLOOD_COUNT_TEMP_BAN_PROBES=true` (default).
 
 </details>
 
@@ -103,14 +103,27 @@ Flow:
 
 ## Configuration
 
-CLI flags and environment variables can both be used. **Flags override env values.** Boolean flags default to `false`.
+CLI flags and environment variables can both be used. **Flags override env values.**
 
 A `.env` file in the working directory is loaded at startup when present (missing file is ignored).
 
 Running the binary with no subcommand starts the HTTP server (same as `serve`).  
 Additional commands: `serve`, `version` (also `-v` / `--version`).
 
-### Flags and environment
+**Notes**
+
+- Boolean env vars accept `true` / `false` (case-insensitive).
+- Time-related settings use **integer minutes, hours, or seconds** — not Go duration strings like `2h` or `30m`.
+- Policy booleans do **not** all default to `false`; see the tables below.
+- Handler order for each probe: path validation → origin check → service match → **whitelist** → ban enforcement → HTTP Basic auth.
+
+Quick help:
+
+```sh
+go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
+```
+
+### Server
 
 | Flag                | Env Var           | Type | Default   | Description                                                                                                                                                                               |
 | ------------------- | ----------------- | ---- | --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -119,11 +132,66 @@ Additional commands: `serve`, `version` (also `-v` / `--version`).
 | `--port`            | `PORT`            | int  | `8080`    | Listen port                                                                                                                                                                               |
 | `--allowed-origins` | `ALLOWED_ORIGINS` | CSV  | _(empty)_ | Allowed `Origin` hostnames/globs (same rules as `SERVICE_*` hostGlob: exact, `*.example.com`, or `*`). When set, other origins are rejected with `403`. Empty disables origin enforcement |
 
-Quick help:
+### IP whitelist
 
-```sh
-go run github.com/CoreUnit-NET/caddy-forward-auth@latest -h
-```
+After successful HTTP Basic auth, the client IP is remembered for a configurable period (default 48h). Whitelist is checked **before** ban enforcement. Each whitelisted probe renews the window. Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does).
+
+| Flag                        | Env Var                   | Type | Default                    | Description                                                                 |
+| --------------------------- | ------------------------- | ---- | -------------------------- | --------------------------------------------------------------------------- |
+| `--whitelist-enabled`       | `WHITELIST_ENABLED`       | bool | `true`                     | Enable temporary IP whitelist after successful Basic auth                   |
+| `--whitelist-period-hours`  | `WHITELIST_PERIOD_HOURS`  | int  | `48`                       | Hours the whitelist entry stays active after each renewal                   |
+| `--whitelist-path`          | `WHITELIST_PATH`          | str  | `./data/ipwhitelist.json`  | Path to whitelist JSON state file                                           |
+| `--whitelist-overrides-ban` | `WHITELIST_OVERRIDES_BAN` | bool | `true`                     | Active whitelist bypasses bans and skips flood recording                    |
+
+When `WHITELIST_OVERRIDES_BAN=false`, whitelisted probes still renew the whitelist window but bans are enforced normally.
+
+### Flood tracking and bans
+
+Failed auth probes can be tracked per client IP and escalate through five configurable tiers into temporary or permanent bans (`403`, `reason=temp_banned` / `reason=banned`). State is persisted under `./data/flood.json` and `./data/ban.json` by default.
+
+| Flag                             | Env Var                        | Type | Default               | Description                                                                 |
+| -------------------------------- | ------------------------------ | ---- | --------------------- | --------------------------------------------------------------------------- |
+| `--flood-enabled`                | `FLOOD_ENABLED`                | bool | `true`                | Enable flood tracking and IP bans                                           |
+| `--flood-retention-hours`        | `FLOOD_RETENTION_HOURS`        | int  | `168`                 | Hours to keep flood event history on disk                                   |
+| `--flood-cleanup-mins`           | `FLOOD_CLEANUP_MINS`           | int  | `60`                  | Minutes between background cleanup of expired flood/ban entries             |
+| `--flood-path`                   | `FLOOD_PATH`                   | str  | `./data/flood.json`   | Path to flood tracking JSON state file                                      |
+| `--ban-path`                     | `BAN_PATH`                     | str  | `./data/ban.json`     | Path to ban JSON state file                                                 |
+| `--data-save-secs`               | `DATA_SAVE_SECS`               | int  | `30`                  | Seconds between dirty JSON saves for whitelist/flood/ban bundles            |
+| `--flood-clear-on-whitelist`     | `FLOOD_CLEAR_ON_WHITELIST`     | bool | `false`               | Clear flood failure history when a whitelisted probe hits                   |
+| `--flood-count-no-credentials`   | `FLOOD_COUNT_NO_CREDENTIALS`   | bool | `true`                | Count probes with missing credentials toward flood tiers                    |
+| `--flood-count-temp-ban-probes`  | `FLOOD_COUNT_TEMP_BAN_PROBES`  | bool | `true`                | Count probes while temp-banned toward flood tiers (permanent bans do not)   |
+
+**What counts as a flood failure**
+
+- `auth_failed` (wrong username/password) always records when flood is enabled.
+- Missing credentials record only when `FLOOD_COUNT_NO_CREDENTIALS=true`.
+- Whitelisted IPs skip flood recording entirely.
+- Temp-banned clients can still accumulate failures when `FLOOD_COUNT_TEMP_BAN_PROBES=true`.
+
+### Flood tiers
+
+There are exactly five tiers. Each tier fires when the failure count within its window is reached. Set `FLOOD_TIERn_PERMANENT=true` for a permanent ban; otherwise `FLOOD_TIERn_BAN_MINS` defines the temporary ban length. The `Rule` field written to `ban.json` is derived from count and window (for example `10/2m`, `120/6h`).
+
+| Tier | Count flag / env              | Window flag / env                  | Ban flag / env                 | Permanent flag / env              | Default punishment                          |
+| ---- | ----------------------------- | ---------------------------------- | ------------------------------ | --------------------------------- | ------------------------------------------- |
+| 1    | `--flood-tier1-count` / `FLOOD_TIER1_COUNT` | `--flood-tier1-window-mins` / `FLOOD_TIER1_WINDOW_MINS` | `--flood-tier1-ban-mins` / `FLOOD_TIER1_BAN_MINS` | `--flood-tier1-permanent` / `FLOOD_TIER1_PERMANENT` | 10 failures in 2m → 3m temp ban             |
+| 2    | `--flood-tier2-count` / `FLOOD_TIER2_COUNT` | `--flood-tier2-window-mins` / `FLOOD_TIER2_WINDOW_MINS` | `--flood-tier2-ban-mins` / `FLOOD_TIER2_BAN_MINS` | `--flood-tier2-permanent` / `FLOOD_TIER2_PERMANENT` | 60 failures in 30m → 120m temp ban        |
+| 3    | `--flood-tier3-count` / `FLOOD_TIER3_COUNT` | `--flood-tier3-window-mins` / `FLOOD_TIER3_WINDOW_MINS` | `--flood-tier3-ban-mins` / `FLOOD_TIER3_BAN_MINS` | `--flood-tier3-permanent` / `FLOOD_TIER3_PERMANENT` | 90 failures in 60m → permanent ban          |
+| 4    | `--flood-tier4-count` / `FLOOD_TIER4_COUNT` | `--flood-tier4-window-mins` / `FLOOD_TIER4_WINDOW_MINS` | `--flood-tier4-ban-mins` / `FLOOD_TIER4_BAN_MINS` | `--flood-tier4-permanent` / `FLOOD_TIER4_PERMANENT` | 120 failures in 360m (6h) → permanent ban   |
+| 5    | `--flood-tier5-count` / `FLOOD_TIER5_COUNT` | `--flood-tier5-window-mins` / `FLOOD_TIER5_WINDOW_MINS` | `--flood-tier5-ban-mins` / `FLOOD_TIER5_BAN_MINS` | `--flood-tier5-permanent` / `FLOOD_TIER5_PERMANENT` | 240 failures in 10080m (7d) → permanent ban |
+
+When multiple tiers match, the harshest applicable punishment wins.
+
+### Logging
+
+Rejections and errors always log a short line (`status`, `path`, `host`, `service`, `user`, `reason` — no passwords).
+
+| Flag                  | Env Var            | Type | Default | Description                                      |
+| --------------------- | ------------------ | ---- | ------- | ------------------------------------------------ |
+| `--log-auth-success`  | `LOG_AUTH_SUCCESS` | bool | `false` | Log successful HTTP Basic auth probes            |
+| `--log-whitelisted`   | `LOG_WHITELISTED`  | bool | `false` | Log whitelisted probes (silent by default)       |
+
+Successful Basic logins also log when `--verbose` / `VERBOSE` is set.
 
 ### Services
 
