@@ -56,19 +56,19 @@ func TestElementActiveDefaultPeriod(t *testing.T) {
 	start := time.Now().UTC().Truncate(time.Second)
 	el := Element{IP: "1.2.3.4", WhitelistTime: start}
 
-	if !el.ExpiresAt().Equal(start.Add(48 * time.Hour)) {
-		t.Fatalf("ExpiresAt=%v", el.ExpiresAt())
+	if !el.ExpiresAt(DefaultPeriod).Equal(start.Add(48 * time.Hour)) {
+		t.Fatalf("ExpiresAt=%v", el.ExpiresAt(DefaultPeriod))
 	}
-	if !el.Active(start) {
+	if !el.Active(start, DefaultPeriod) {
 		t.Fatal("expected active at start")
 	}
-	if !el.Active(start.Add(47 * time.Hour)) {
+	if !el.Active(start.Add(47*time.Hour), DefaultPeriod) {
 		t.Fatal("expected active before 48h")
 	}
-	if el.Active(start.Add(48 * time.Hour)) {
+	if el.Active(start.Add(48*time.Hour), DefaultPeriod) {
 		t.Fatal("expected inactive at exact expiry")
 	}
-	if el.Active(start.Add(-time.Second)) {
+	if el.Active(start.Add(-time.Second), DefaultPeriod) {
 		t.Fatal("expected inactive before whitelist time")
 	}
 }

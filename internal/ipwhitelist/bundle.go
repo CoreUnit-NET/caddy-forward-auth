@@ -24,6 +24,7 @@ var ErrPeriodicSaveNotRunning = errors.New("ipwhitelist: periodic save not runni
 type Bundle struct {
 	mu       sync.Mutex
 	path     string
+	period   time.Duration
 	dirty    bool
 	elements []Element
 	saver    persist.Periodic
@@ -36,17 +37,18 @@ type bundleFile struct {
 
 // OpenDefault loads a Bundle from DefaultPath (./data/ipwhitelist.json).
 func OpenDefault() (*Bundle, error) {
-	return Open(DefaultPath)
+	return OpenWithPeriod(DefaultPath, DefaultPeriod)
 }
 
-// Open loads a Bundle from path. An empty path uses DefaultPath.
-// If the file does not exist, an empty bundle bound to that path is returned
-// (not marked dirty).
-func Open(path string) (*Bundle, error) {
+// OpenWithPeriod loads a Bundle from path using the given active period.
+func OpenWithPeriod(path string, period time.Duration) (*Bundle, error) {
 	if path == "" {
 		path = DefaultPath
 	}
-	b := &Bundle{path: path}
+	if period <= 0 {
+		period = DefaultPeriod
+	}
+	b := &Bundle{path: path, period: period}
 	data, err := persist.ReadFileIfExists(path)
 	if err != nil {
 		return nil, fmt.Errorf("ipwhitelist: %w", err)
@@ -63,6 +65,13 @@ func Open(path string) (*Bundle, error) {
 		b.elements = []Element{}
 	}
 	return b, nil
+}
+
+// Open loads a Bundle from path. An empty path uses DefaultPath.
+// If the file does not exist, an empty bundle bound to that path is returned
+// (not marked dirty).
+func Open(path string) (*Bundle, error) {
+	return OpenWithPeriod(path, DefaultPeriod)
 }
 
 // Path returns the JSON file path used for load/save.
@@ -120,7 +129,7 @@ func (b *Bundle) Contains(ip string, now time.Time) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	for _, el := range b.elements {
-		if el.IP == ip && el.Active(now) {
+		if el.IP == ip && el.Active(now, b.period) {
 			return true
 		}
 	}
@@ -196,7 +205,7 @@ func (b *Bundle) pruneExpiredLocked(now time.Time) bool {
 	for _, el := range b.elements {
 		// Drop empty/invalid and entries whose whitelist window has ended.
 		// Keep not-yet-started entries (WhitelistTime in the future).
-		if el.IP == "" || el.WhitelistTime.IsZero() || !now.Before(el.ExpiresAt()) {
+		if el.IP == "" || el.WhitelistTime.IsZero() || !now.Before(el.ExpiresAt(b.period)) {
 			removed = true
 			continue
 		}

@@ -21,14 +21,20 @@ type Element struct {
 }
 
 // ExpiresAt returns when this entry stops being whitelisted.
-func (e Element) ExpiresAt() time.Time {
-	return e.WhitelistTime.Add(DefaultPeriod)
+func (e Element) ExpiresAt(period time.Duration) time.Time {
+	if period <= 0 {
+		period = DefaultPeriod
+	}
+	return e.WhitelistTime.Add(period)
 }
 
-// Active reports whether the entry covers now within DefaultPeriod.
-func (e Element) Active(now time.Time) bool {
+// Active reports whether the entry covers now within period after WhitelistTime.
+func (e Element) Active(now time.Time, period time.Duration) bool {
 	if e.IP == "" || e.WhitelistTime.IsZero() {
 		return false
 	}
-	return !now.Before(e.WhitelistTime) && now.Before(e.ExpiresAt())
+	if period <= 0 {
+		period = DefaultPeriod
+	}
+	return !now.Before(e.WhitelistTime) && now.Before(e.ExpiresAt(period))
 }
