@@ -59,8 +59,8 @@ func TestRecordFailureEscalatesToPermanent(t *testing.T) {
 	if !ok || !ban.Permanent {
 		t.Fatalf("expected permanent ban, got ok=%v %#v", ok, ban)
 	}
-	if ban.Rule != "90/60m" {
-		t.Fatalf("Rule=%q, want 90/60m", ban.Rule)
+	if ban.Rule != "90/1h" {
+		t.Fatalf("Rule=%q, want 90/1h", ban.Rule)
 	}
 }
 

@@ -162,6 +162,34 @@ func (b *Bundle) RemoveOlderThan(cutoff time.Time) int {
 	return removed
 }
 
+// RemoveForIP deletes all entries for ip and marks dirty when any were removed.
+func (b *Bundle) RemoveForIP(ip string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if ip == "" || len(b.entries) == 0 {
+		return 0
+	}
+	kept := b.entries[:0]
+	removed := 0
+	for _, e := range b.entries {
+		if e.IP == ip {
+			removed++
+			continue
+		}
+		kept = append(kept, e)
+	}
+	if removed == 0 {
+		return 0
+	}
+	if len(kept) == 0 {
+		b.entries = nil
+	} else {
+		b.entries = kept
+	}
+	b.dirty = true
+	return removed
+}
+
 // Clear removes all entries and marks dirty when the bundle was non-empty.
 // It does not write to disk.
 func (b *Bundle) Clear() {

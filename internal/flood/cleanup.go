@@ -25,7 +25,11 @@ func (e *Engine) Cleanup(now time.Time) {
 		now = time.Now().UTC()
 	}
 	if e.Track != nil {
-		e.Track.RemoveOlderThan(now.Add(-floodtrack.DefaultRetention))
+		cutoff := now.Add(-e.retention)
+		if e.retention <= 0 {
+			cutoff = now.Add(-floodtrack.DefaultRetention)
+		}
+		e.Track.RemoveOlderThan(cutoff)
 	}
 	if e.Bans != nil {
 		e.Bans.RemoveExpired(now)

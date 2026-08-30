@@ -65,8 +65,10 @@ func (e *Engine) CheckBan(w http.ResponseWriter, r *http.Request, service string
 		http.Error(w, "banned", http.StatusForbidden)
 		return found, true
 	}
-	// Temp bans still count as flood violations.
-	e.RecordFailure(ip, service, now)
+	// Temp bans still count as flood violations when enabled.
+	if e.countTempBanProbes {
+		e.RecordFailure(ip, service, now)
+	}
 	http.Error(w, "temporarily banned", http.StatusForbidden)
 	return found, true
 }

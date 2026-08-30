@@ -4,27 +4,42 @@ import (
 	"time"
 
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodban"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/settings"
 )
 
-// punishmentRule is one flood threshold that may introduce a ban.
-type punishmentRule struct {
-	ID           string
-	Count        int
-	Window       time.Duration
-	TempDuration time.Duration // ignored when Permanent
-	Permanent    bool
+// punishmentRule is kept as an alias for internal rule storage on Engine.
+type punishmentRule = Rule
+
+type defaultTier struct {
+	count, windowMins, banMins int
+	permanent                  bool
 }
 
-// rules are evaluated on each failure; the harshest matching rule wins.
-var rules = []punishmentRule{
-	{ID: "10/2m", Count: 10, Window: 2 * time.Minute, TempDuration: 3 * time.Minute},
-	{ID: "60/30m", Count: 60, Window: 30 * time.Minute, TempDuration: 2 * time.Hour},
-	{ID: "90/60m", Count: 90, Window: 60 * time.Minute, Permanent: true},
-	{ID: "120/6h", Count: 120, Window: 6 * time.Hour, Permanent: true},
-	{ID: "240/168h", Count: 240, Window: 168 * time.Hour, Permanent: true},
+func defaultRules() []Rule {
+	defs := []defaultTier{
+		{10, 2, 3, false},
+		{60, 30, 120, false},
+		{90, 60, 0, true},
+		{120, 360, 0, true},
+		{240, 10080, 0, true},
+	}
+	out := make([]Rule, 0, len(defs))
+	for _, d := range defs {
+		rule := Rule{
+			ID:        settings.FormatTierID(d.count, d.windowMins),
+			Count:     d.count,
+			Window:    time.Duration(d.windowMins) * time.Minute,
+			Permanent: d.permanent,
+		}
+		if !d.permanent {
+			rule.TempDuration = time.Duration(d.banMins) * time.Minute
+		}
+		out = append(out, rule)
+	}
+	return out
 }
 
-func banFromRule(ip string, now time.Time, rule punishmentRule) floodban.Ban {
+func banFromRule(ip string, now time.Time, rule Rule) floodban.Ban {
 	ban := floodban.Ban{
 		IP:        ip,
 		BannedAt:  now,

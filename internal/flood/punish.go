@@ -17,7 +17,7 @@ func (e *Engine) UpdatePunishments(ip string, now time.Time) {
 	}
 
 	var best floodban.Ban
-	for _, rule := range rules {
+	for _, rule := range e.rules {
 		count := e.Track.CountSince(ip, now.Add(-rule.Window))
 		if count < rule.Count {
 			continue
