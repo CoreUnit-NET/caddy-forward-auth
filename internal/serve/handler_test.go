@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -15,9 +16,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/auth"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/config"
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/flood"
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/floodban"
 	"github.com/CoreUnit-NET/caddy-forward-auth/internal/ipwhitelist"
+	"github.com/CoreUnit-NET/caddy-forward-auth/internal/settings"
 )
 
 func testLogger(t *testing.T) *log.Logger {
@@ -36,6 +39,37 @@ func mustHash(t *testing.T, password string) string {
 
 func testOrigins() []string {
 	return []string{"intern-auth.example.com", "localhost"}
+}
+
+func testSettings(t *testing.T, verbose bool, overrides ...map[string]string) *settings.Settings {
+	t.Helper()
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	os.Args = []string{"test", "serve"}
+	for _, key := range []string{
+		"VERBOSE", "ALLOWED_ORIGINS", "WHITELIST_OVERRIDES_BAN", "WHITELIST_ENABLED",
+		"FLOOD_ENABLED", "FLOOD_CLEAR_ON_WHITELIST", "FLOOD_COUNT_NO_CREDENTIALS", "LOG_WHITELISTED",
+	} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("ALLOWED_ORIGINS", strings.Join(testOrigins(), ","))
+	if verbose {
+		t.Setenv("VERBOSE", "true")
+	}
+	for _, o := range overrides {
+		for k, v := range o {
+			t.Setenv(k, v)
+		}
+	}
+	cfg, err := config.ParseConfig("Test", "test")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	st, err := settings.FromAppConfig(cfg)
+	if err != nil {
+		t.Fatalf("FromAppConfig: %v", err)
+	}
+	return st
 }
 
 func testServices(t *testing.T) map[string]auth.ServiceCred {
@@ -58,14 +92,14 @@ func testServices(t *testing.T) map[string]auth.ServiceCred {
 
 func testHandler(t *testing.T) http.Handler {
 	t.Helper()
-	return NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", nil, nil)
+	return NewHandler(testLogger(t), testSettings(t, true), testServices(t), "test-realm", nil, nil)
 }
 
 func testHandlerWithLog(t *testing.T) (http.Handler, *bytes.Buffer) {
 	t.Helper()
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	return NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, nil), &buf
+	return NewHandler(logger, testSettings(t, true), testServices(t), "test-realm", nil, nil), &buf
 }
 
 func basicHeader(user, pass string) string {
@@ -157,15 +191,9 @@ func TestAuthProbeOriginNullRejected(t *testing.T) {
 }
 
 func TestAuthProbeOriginGlobAllowed(t *testing.T) {
-	h := NewHandler(
-		testLogger(t),
-		true,
-		[]string{"*.intern.example.com"},
-		testServices(t),
-		"test-realm",
-		nil,
-		nil,
-	)
+	h := NewHandler(testLogger(t), testSettings(t, true, map[string]string{
+		"ALLOWED_ORIGINS": "*.intern.example.com",
+	}), testServices(t), "test-realm", nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
 	req.Header.Set("Authorization", basicHeader("tester", "secret"))
@@ -237,7 +265,8 @@ func TestLogVerboseConfigIncludesPasswordHash(t *testing.T) {
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
 	services := testServices(t)
-	logVerboseConfig(logger, services, []string{"localhost"})
+	st := testSettings(t, true)
+	logVerboseConfig(logger, st, services)
 
 	out := buf.String()
 	if !strings.Contains(out, "passwordHash=") {
@@ -246,8 +275,10 @@ func TestLogVerboseConfigIncludesPasswordHash(t *testing.T) {
 	if !strings.Contains(out, "service intern ->") || !strings.Contains(out, "service test ->") {
 		t.Fatalf("expected sorted service lines, got: %s", out)
 	}
-	if !strings.Contains(out, "allowed origin localhost") {
-		t.Fatalf("expected allowed origin line, got: %s", out)
+	for _, origin := range testOrigins() {
+		if !strings.Contains(out, "allowed origin "+origin) {
+			t.Fatalf("expected allowed origin %q line, got: %s", origin, out)
+		}
 	}
 	// Ensure hashes from both services appear (not redacted).
 	for _, cred := range services {
@@ -267,7 +298,7 @@ func TestAuthProbeWhitelistedSkipsBasic(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", wl, nil)
+	h := NewHandler(logger, testSettings(t, true), testServices(t), "test-realm", wl, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -292,7 +323,7 @@ func TestAuthProbeWhitelistedRenewsEntry(t *testing.T) {
 	start := time.Now().UTC().Add(-47 * time.Hour).Truncate(time.Second)
 	wl.Upsert("203.0.113.10", start)
 
-	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, nil)
+	h := NewHandler(testLogger(t), testSettings(t, true), testServices(t), "test-realm", wl, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -331,7 +362,7 @@ func TestAuthProbeWhitelistedBypassesBan(t *testing.T) {
 		Rule:      "manual",
 	})
 
-	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, eng)
+	h := NewHandler(testLogger(t), testSettings(t, true), testServices(t), "test-realm", wl, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -363,7 +394,7 @@ func TestAuthProbeWhitelistedNoFloodRecord(t *testing.T) {
 		Rule:      "temp",
 	})
 
-	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, eng)
+	h := NewHandler(testLogger(t), testSettings(t, true), testServices(t), "test-realm", wl, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -382,7 +413,7 @@ func TestAuthProbeWhitelistedNoFloodRecord(t *testing.T) {
 func TestAuthProbeSuccessSilentWithoutVerbose(t *testing.T) {
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, false, testOrigins(), testServices(t), "test-realm", nil, nil)
+	h := NewHandler(logger, testSettings(t, false), testServices(t), "test-realm", nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -401,7 +432,7 @@ func TestAuthProbeSuccessSilentWithoutVerbose(t *testing.T) {
 func TestAuthProbeRejectionLoggedWithoutVerbose(t *testing.T) {
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, false, testOrigins(), testServices(t), "test-realm", nil, nil)
+	h := NewHandler(logger, testSettings(t, false), testServices(t), "test-realm", nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -424,7 +455,7 @@ func TestAuthProbeRecordsFloodOnAuthFailed(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, eng)
+	h := NewHandler(logger, testSettings(t, true), testServices(t), "test-realm", nil, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -457,7 +488,7 @@ func TestAuthProbePermanentBan(t *testing.T) {
 
 	var buf bytes.Buffer
 	logger := log.New(&buf, "", 0)
-	h := NewHandler(logger, true, testOrigins(), testServices(t), "test-realm", nil, eng)
+	h := NewHandler(logger, testSettings(t, true), testServices(t), "test-realm", nil, eng)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
 	req.Header.Set("X-Forwarded-Host", "test.example.com")
@@ -470,6 +501,184 @@ func TestAuthProbePermanentBan(t *testing.T) {
 		t.Fatalf("status=%d, want 403", rr.Code)
 	}
 	assertAuthLog(t, buf.String(), "reason=banned", "ip=198.51.100.30")
+}
+
+func TestAuthProbeWhitelistedRespectsBanWhenOverrideDisabled(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("198.51.100.31")
+
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+	eng.Bans.Upsert(floodban.Ban{
+		IP:        "198.51.100.31",
+		Permanent: true,
+		BannedAt:  time.Now().UTC(),
+		Rule:      "manual",
+	})
+
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	h := NewHandler(logger, testSettings(t, true, map[string]string{
+		"WHITELIST_OVERRIDES_BAN": "false",
+	}), testServices(t), "test-realm", wl, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.31")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("status=%d, want 403 when whitelist does not override ban", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "reason=banned", "ip=198.51.100.31")
+}
+
+func TestAuthProbeNoFloodRecordWhenCountNoCredentialsDisabled(t *testing.T) {
+	dir := t.TempDir()
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+
+	h := NewHandler(testLogger(t), testSettings(t, true, map[string]string{
+		"FLOOD_COUNT_NO_CREDENTIALS": "false",
+	}), testServices(t), "test-realm", nil, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.21")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d, want 401", rr.Code)
+	}
+	if got := len(eng.Track.Entries()); got != 0 {
+		t.Fatalf("flood entries=%d, want 0 when FLOOD_COUNT_NO_CREDENTIALS=false", got)
+	}
+}
+
+func TestAuthProbeWhitelistedClearsFailuresWhenConfigured(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("198.51.100.41")
+
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+	now := time.Now().UTC()
+	eng.RecordFailure("198.51.100.41", "test", now)
+	if got := len(eng.Track.Entries()); got != 1 {
+		t.Fatalf("setup flood entries=%d, want 1", got)
+	}
+
+	h := NewHandler(testLogger(t), testSettings(t, true, map[string]string{
+		"FLOOD_CLEAR_ON_WHITELIST": "true",
+	}), testServices(t), "test-realm", wl, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.41")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", rr.Code)
+	}
+	if got := len(eng.Track.Entries()); got != 0 {
+		t.Fatalf("flood entries=%d, want 0 after whitelisted clear", got)
+	}
+}
+
+func TestAuthProbeWhitelistDisabledIgnoresBundle(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("203.0.113.12")
+
+	h := NewHandler(testLogger(t), testSettings(t, true, map[string]string{
+		"WHITELIST_ENABLED": "false",
+	}), testServices(t), "test-realm", wl, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "203.0.113.12")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d, want 401 when whitelist disabled", rr.Code)
+	}
+}
+
+func TestAuthProbeFloodDisabledSkipsBanAndRecord(t *testing.T) {
+	dir := t.TempDir()
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+	eng.Bans.Upsert(floodban.Ban{
+		IP:        "198.51.100.50",
+		Permanent: true,
+		BannedAt:  time.Now().UTC(),
+		Rule:      "manual",
+	})
+
+	h := NewHandler(testLogger(t), testSettings(t, true, map[string]string{
+		"FLOOD_ENABLED": "false",
+	}), testServices(t), "test-realm", nil, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.50")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("status=%d, want 401 without flood enforcement", rr.Code)
+	}
+	if got := len(eng.Track.Entries()); got != 0 {
+		t.Fatalf("flood entries=%d, want 0 when flood disabled", got)
+	}
+}
+
+func TestAuthProbeWhitelistedLoggedWhenConfigured(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("203.0.113.11")
+
+	var buf bytes.Buffer
+	logger := log.New(&buf, "", 0)
+	h := NewHandler(logger, testSettings(t, false, map[string]string{
+		"LOG_WHITELISTED": "true",
+	}), testServices(t), "test-realm", wl, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "203.0.113.11")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", rr.Code)
+	}
+	assertAuthLog(t, buf.String(), "status=200", "reason=whitelisted", "ip=203.0.113.11")
 }
 
 func TestAtom(t *testing.T) {
