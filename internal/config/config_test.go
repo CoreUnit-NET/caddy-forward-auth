@@ -11,6 +11,11 @@ func clearConfigEnv(t *testing.T) {
 	t.Helper()
 	for _, key := range []string{
 		"VERBOSE", "HOST", "PORT", "ALLOWED_ORIGINS",
+		"WHITELIST_ENABLED", "WHITELIST_PERIOD_HOURS", "WHITELIST_PATH", "WHITELIST_OVERRIDES_BAN",
+		"FLOOD_ENABLED", "FLOOD_RETENTION_HOURS", "FLOOD_CLEANUP_MINS", "FLOOD_PATH", "BAN_PATH",
+		"DATA_SAVE_SECS", "FLOOD_CLEAR_ON_WHITELIST", "FLOOD_COUNT_NO_CREDENTIALS", "FLOOD_COUNT_TEMP_BAN_PROBES",
+		"FLOOD_TIER1_COUNT", "FLOOD_TIER1_WINDOW_MINS", "FLOOD_TIER1_BAN_MINS", "FLOOD_TIER1_PERMANENT",
+		"LOG_AUTH_SUCCESS", "LOG_WHITELISTED",
 	} {
 		t.Setenv(key, "")
 	}
@@ -38,6 +43,21 @@ func TestParseConfigDefaults(t *testing.T) {
 	}
 	if cfg.AllowedOrigins != "" {
 		t.Fatalf("AllowedOrigins = %q, want empty", cfg.AllowedOrigins)
+	}
+	if !cfg.WhitelistEnabled {
+		t.Fatal("expected WhitelistEnabled true by default")
+	}
+	if cfg.WhitelistPeriodHours != 48 {
+		t.Fatalf("WhitelistPeriodHours = %d, want 48", cfg.WhitelistPeriodHours)
+	}
+	if !cfg.FloodEnabled {
+		t.Fatal("expected FloodEnabled true by default")
+	}
+	if !cfg.WhitelistOverridesBan {
+		t.Fatal("expected WhitelistOverridesBan true by default")
+	}
+	if !cfg.FloodCountNoCredentials {
+		t.Fatal("expected FloodCountNoCredentials true by default")
 	}
 }
 
@@ -130,5 +150,38 @@ func TestParseConfigHelpRequested(t *testing.T) {
 	_, err := ParseConfig("Demo", "demo")
 	if !errors.Is(err, ErrHelpRequested) {
 		t.Fatalf("err = %v, want ErrHelpRequested", err)
+	}
+}
+
+func TestParseConfigPolicyEnv(t *testing.T) {
+	oldArgs := os.Args
+	t.Cleanup(func() { os.Args = oldArgs })
+	clearConfigEnv(t)
+
+	t.Setenv("WHITELIST_OVERRIDES_BAN", "false")
+	t.Setenv("FLOOD_CLEAR_ON_WHITELIST", "true")
+	t.Setenv("FLOOD_COUNT_NO_CREDENTIALS", "false")
+	t.Setenv("FLOOD_TIER1_COUNT", "5")
+	t.Setenv("LOG_WHITELISTED", "true")
+
+	os.Args = []string{"caddy-forward-auth", "serve"}
+	cfg, err := ParseConfig("Demo", "demo")
+	if err != nil {
+		t.Fatalf("ParseConfig: %v", err)
+	}
+	if cfg.WhitelistOverridesBan {
+		t.Fatal("expected WHITELIST_OVERRIDES_BAN=false from env")
+	}
+	if !cfg.FloodClearOnWhitelist {
+		t.Fatal("expected FLOOD_CLEAR_ON_WHITELIST=true from env")
+	}
+	if cfg.FloodCountNoCredentials {
+		t.Fatal("expected FLOOD_COUNT_NO_CREDENTIALS=false from env")
+	}
+	if cfg.FloodTier1Count != 5 {
+		t.Fatalf("FloodTier1Count = %d, want 5", cfg.FloodTier1Count)
+	}
+	if !cfg.LogWhitelisted {
+		t.Fatal("expected LOG_WHITELISTED=true from env")
 	}
 }
