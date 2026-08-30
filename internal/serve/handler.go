@@ -72,8 +72,14 @@ func authProbe(
 		}
 		serviceHint := matched[0].Name
 
-		// Ban check before whitelist/auth. Permanent bans short-circuit;
-		// temp bans still record flood failures inside CheckBan.
+		// Temporary IP whitelist: skip Basic auth and ban enforcement for remembered clients.
+		// Checked before bans so active whitelist entries are not blocked or flood-counted.
+		if whitelist != nil && clientIP != "" && whitelist.Contains(clientIP, now) {
+			whitelist.UpsertNow(clientIP)
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
 		if floodEng != nil {
 			ban, blocked := floodEng.CheckBan(w, r, serviceHint, now)
 			if blocked {
@@ -86,16 +92,9 @@ func authProbe(
 			}
 		}
 
-		// Temporary IP whitelist: skip Basic auth for remembered clients.
-		if whitelist != nil && clientIP != "" && whitelist.Contains(clientIP, now) {
-			w.WriteHeader(http.StatusOK)
-			logAuthEvent(logger, verbose, http.StatusOK, method, path, targetHost, origin, clientIP, serviceHint, "", "whitelisted")
-			return
-		}
-
 		username, password, ok := r.BasicAuth()
 		if !ok {
-			if floodEng != nil && clientIP != "" {
+			if floodEng != nil && clientIP != "" && !isWhitelisted(whitelist, clientIP, now) {
 				floodEng.RecordFailure(clientIP, serviceHint, now)
 			}
 			unauthorized(w, realm)
@@ -105,7 +104,7 @@ func authProbe(
 
 		cred, ok := auth.CheckBasicAuthAgainstServices(matched, username, password)
 		if !ok {
-			if floodEng != nil && clientIP != "" {
+			if floodEng != nil && clientIP != "" && !isWhitelisted(whitelist, clientIP, now) {
 				floodEng.RecordFailure(clientIP, serviceHint, now)
 			}
 			unauthorized(w, realm)
@@ -125,6 +124,10 @@ func authProbe(
 
 // logAuthEvent writes one atomic key=value auth line.
 // Errors and rejections (status >= 400) always log; successes only when verbose.
+func isWhitelisted(whitelist *ipwhitelist.Bundle, ip string, now time.Time) bool {
+	return whitelist != nil && ip != "" && whitelist.Contains(ip, now)
+}
+
 func logAuthEvent(
 	logger *log.Logger,
 	verbose bool,

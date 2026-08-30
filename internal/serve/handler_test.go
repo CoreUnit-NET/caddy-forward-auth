@@ -278,7 +278,105 @@ func TestAuthProbeWhitelistedSkipsBasic(t *testing.T) {
 	if rr.Code != http.StatusOK {
 		t.Fatalf("status=%d, want 200", rr.Code)
 	}
-	assertAuthLog(t, buf.String(), "status=200", "ip=203.0.113.10", "reason=whitelisted")
+	if buf.Len() != 0 {
+		t.Fatalf("expected no auth log for whitelisted probe, got: %q", buf.String())
+	}
+}
+
+func TestAuthProbeWhitelistedRenewsEntry(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	start := time.Now().UTC().Add(-47 * time.Hour).Truncate(time.Second)
+	wl.Upsert("203.0.113.10", start)
+
+	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "203.0.113.10")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", rr.Code)
+	}
+	elems := wl.Elements()
+	if len(elems) != 1 {
+		t.Fatalf("elements=%d, want 1", len(elems))
+	}
+	if !elems[0].WhitelistTime.After(start) {
+		t.Fatalf("WhitelistTime=%v, want renewed after %v", elems[0].WhitelistTime, start)
+	}
+}
+
+func TestAuthProbeWhitelistedBypassesBan(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("198.51.100.30")
+
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+	eng.Bans.Upsert(floodban.Ban{
+		IP:        "198.51.100.30",
+		Permanent: true,
+		BannedAt:  time.Now().UTC(),
+		Rule:      "manual",
+	})
+
+	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.30")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200; body=%s", rr.Code, rr.Body.String())
+	}
+}
+
+func TestAuthProbeWhitelistedNoFloodRecord(t *testing.T) {
+	dir := t.TempDir()
+	wl, err := ipwhitelist.Open(filepath.Join(dir, "ipwhitelist.json"))
+	if err != nil {
+		t.Fatalf("whitelist open: %v", err)
+	}
+	wl.UpsertNow("198.51.100.40")
+
+	eng, err := flood.Open(filepath.Join(dir, "flood.json"), filepath.Join(dir, "ban.json"))
+	if err != nil {
+		t.Fatalf("flood open: %v", err)
+	}
+	eng.Bans.Upsert(floodban.Ban{
+		IP:        "198.51.100.40",
+		BannedAt:  time.Now().UTC().Add(-time.Hour),
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+		Rule:      "temp",
+	})
+
+	h := NewHandler(testLogger(t), true, testOrigins(), testServices(t), "test-realm", wl, eng)
+
+	req := httptest.NewRequest(http.MethodGet, "/auth", nil)
+	req.Header.Set("X-Forwarded-Host", "test.example.com")
+	req.Header.Set("X-Forwarded-For", "198.51.100.40")
+	rr := httptest.NewRecorder()
+	h.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("status=%d, want 200", rr.Code)
+	}
+	if got := len(eng.Track.Entries()); got != 0 {
+		t.Fatalf("flood entries=%d, want 0 for whitelisted temp-ban bypass", got)
+	}
 }
 
 func TestAuthProbeSuccessSilentWithoutVerbose(t *testing.T) {
