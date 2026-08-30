@@ -151,7 +151,9 @@ clean: ##@ cleans up generated files and docker cache
 	fi
 	@if command -v docker 2>&1 >/dev/null; then \
 		echo "cleanup docker containers and images..."; \
-		docker compose down --remove-orphans > /dev/null 2>&1 || true; \
+		mkdir -p tmp; \
+		test -f tmp/.env.compose || printf 'PORT=%s\nUID=%s\nGID=%s\n' "$(PORT)" "$(UID)" "$(GID)" > tmp/.env.compose; \
+		$(DOCKER_COMPOSE) down --remove-orphans > /dev/null 2>&1 || true; \
 		docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true; \
 		docker image prune -f; \
 	fi
@@ -213,32 +215,43 @@ dev: ##@ runs the app in watch mode
 ##@ Docker targets
 ##@
 
+# Compose reads project .env for ${PORT} interpolation; bcrypt $ in SERVICE_* triggers
+# false "variable is not set" warnings. tmp/.env.compose holds only bind/port vars.
+DOCKER_COMPOSE ?= docker compose --env-file tmp/.env.compose
+
+.PHONY: docker/env
+docker/env: ##@ writes tmp/.env.docker ($$ escaped) and tmp/.env.compose for compose
+	@mkdir -p tmp
+	@if [ -f .env ]; then src=.env; elif [ -f .env.sample ]; then src=.env.sample; else echo "missing .env or .env.sample" >&2; exit 1; fi; \
+	sed 's/\$$/$$$$/g' "$$src" > tmp/.env.docker; \
+	printf 'PORT=%s\nHOST=%s\nUID=%s\nGID=%s\n' "$(PORT)" "$(HOST)" "$(UID)" "$(GID)" > tmp/.env.compose
+
 .PHONY: docker
-docker: ##@ runs a shell in the container
+docker: docker/env ##@ runs a shell in the container
 	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
-	docker compose run -P --rm -it --build --service-ports \
+	$(DOCKER_COMPOSE) run -P --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME) \
 		-e INIT_CMD="bash" \
 		local
 
 .PHONY: docker/dev
-docker/dev: ##@ runs app in docker via air
+docker/dev: docker/env ##@ runs app in docker via air
 	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
-	docker compose run --rm -it --build --service-ports \
+	$(DOCKER_COMPOSE) run --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME) \
 		local
 
 .PHONY: docker/deploy
-docker/deploy: ##@ runs app in docker in a fresh environment
+docker/deploy: docker/env ##@ runs app in docker in a fresh environment
 	@docker rm -f dev-$(PROJECT_SHORT_NAME) > /dev/null 2>&1 || true
-	docker compose run --rm -it --build --service-ports \
+	$(DOCKER_COMPOSE) run --rm -it --build --service-ports \
 		--name dev-$(PROJECT_SHORT_NAME) \
 		deploy
 
 .PHONY: docker/up
-docker/up: ##@ builds and starts deploy service detached in background
-	docker compose up deploy --build -d
+docker/up: docker/env ##@ builds and starts deploy service detached in background
+	$(DOCKER_COMPOSE) up deploy --build -d
 
 .PHONY: docker/down
-docker/down: ##@ stops deploy service and removes containers
-	docker compose down --remove-orphans
+docker/down: docker/env ##@ stops deploy service and removes containers
+	$(DOCKER_COMPOSE) down --remove-orphans
