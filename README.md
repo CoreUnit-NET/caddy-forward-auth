@@ -19,7 +19,7 @@ Caddy keeps TLS, routing, and reverse-proxying; this service only answers the au
 Configure one or more `SERVICE_*` entries (host glob + username + bcrypt password hash).
 On each probe the service resolves the target host (`X-Forwarded-Host` / `Host`), matches a service entry, and checks HTTP Basic credentials.
 A successful login returns `200` (and `Remote-User`); failures return `401` with a Basic challenge.
-After a success the client IP can stay temporarily whitelisted (default 48h, no cookies/sessions) so browsers are not prompted again on every request.
+After a success the client IP can stay temporarily whitelisted (default 48h, no cookies/sessions) so browsers are not prompted again on every request. Each whitelisted probe renews that window.
 Repeated failed attempts are flood-tracked and can escalate into temporary or permanent IP bans.
 
 Run it on a private network (or localhost) reachable only by Caddy—not on the public internet.
@@ -36,8 +36,8 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - **Origin allowlist**: Optional `ALLOWED_ORIGINS` CSV restricts browser `Origin` hostnames. Requests without an `Origin` header (typical for Caddy probes) are allowed.
 - **Target host resolution**: The protected host is taken from `X-Forwarded-Host` (first value if CSV), falling back to the request `Host`.
 - **Startup checks**: Boot fails when no `SERVICE_*` entries are configured or when a password hash is not valid bcrypt.
-- **Auth event logs**: Every probe logs a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords).
-- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h) so follow-up probes succeed without a new password prompt (`reason=whitelisted`). Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
+- **Auth event logs**: Rejections and errors always log a short line with `status`, `path`, `host`, chosen `service`, `user`, and `reason` (no passwords). Successful Basic logins log only when `--verbose` / `VERBOSE` is set. Whitelisted probes are silent.
+- **Temporary IP whitelist**: After successful Basic auth, the client IP is remembered for a limited time (default 48h). Active whitelist entries are checked **before** ban enforcement and flood counting; each whitelisted probe renews the window. Whitelist hits return `200` but do **not** set `Remote-User` (only a full Basic success does). State is persisted under `./data/ipwhitelist.json` (not cookies or sessions).
 - **Flood prevention**: Failed Basic attempts (`no_credentials`, `auth_failed`) are tracked per client IP. Escalating thresholds create temporary or permanent IP bans (`403`, `reason=banned` / `temp_banned`). State lives in `./data/flood.json` and `./data/ban.json`.
 
 </details>
@@ -67,7 +67,7 @@ State for whitelist, flood events, and bans is persisted under `./data/` by defa
 - Put secrets in `.env` (loaded automatically if present) or your secret manager; never commit real password hashes.
 - The temporary IP whitelist file (`./data/ipwhitelist.json` by default) and flood/ban files (`./data/flood.json`, `./data/ban.json`) trust client IPs as seen via `X-Forwarded-For` / `X-Real-IP` / `RemoteAddr`—keep the service on a private network behind Caddy so those addresses are meaningful.
 - Whitelist `200` responses omit `Remote-User`; only a successful Basic login sets that header for Caddy `copy_headers`.
-- Flood thresholds (per IP): 10 failures / 2m → 3m ban; 60 / 30m → 2h ban; 90 / 60m, 120 / 6h, or 240 / 168h → permanent ban. Temp-banned clients still accumulate flood events.
+- Flood thresholds (per IP): 10 failures / 2m → 3m ban; 60 / 30m → 2h ban; 90 / 60m, 120 / 6h, or 240 / 168h → permanent ban. Whitelisted IPs skip flood recording and ban checks. Non-whitelisted temp-banned clients still accumulate flood events on each blocked probe.
 
 </details>
 
