@@ -76,38 +76,38 @@ func defaultAppConfig() *AppConfig {
 		AllowedOrigins: "",
 
 		WhitelistEnabled:      true,
-		WhitelistPeriodHours:  48,
+		WhitelistPeriodHours:  120, // 5 days
 		WhitelistPath:         "./data/ipwhitelist.json",
 		WhitelistOverridesBan: true,
 
 		FloodEnabled:            true,
 		FloodRetentionHours:     168,
-		FloodCleanupMins:        60,
+		FloodCleanupMins:        120,
 		FloodPath:               "./data/flood.json",
 		BanPath:                 "./data/ban.json",
-		DataSaveSecs:            30,
-		FloodClearOnWhitelist:   false,
+		DataSaveSecs:            120,
+		FloodClearOnWhitelist:   true,
 		FloodCountNoCredentials: true,
 		FloodCountTempBanProbes: true,
 
-		FloodTier1Count:      10,
-		FloodTier1WindowMins: 2,
-		FloodTier1BanMins:    3,
+		FloodTier1Count:      30, // level 1 temp ban
+		FloodTier1WindowMins: 5,
+		FloodTier1BanMins:    5,
 		FloodTier1Permanent:  false,
-		FloodTier2Count:      60,
-		FloodTier2WindowMins: 30,
-		FloodTier2BanMins:    120,
-		FloodTier2Permanent:  false,
-		FloodTier3Count:      90,
+		FloodTier2Count:      45, // level 1 perm ban
+		FloodTier2WindowMins: 5,
+		FloodTier2BanMins:    0,
+		FloodTier2Permanent:  true,
+		FloodTier3Count:      90, // level 2 temp ban
 		FloodTier3WindowMins: 60,
-		FloodTier3BanMins:    0,
-		FloodTier3Permanent:  true,
-		FloodTier4Count:      120,
-		FloodTier4WindowMins: 360,
+		FloodTier3BanMins:    60,
+		FloodTier3Permanent:  false,
+		FloodTier4Count:      120, // level 2 perm ban
+		FloodTier4WindowMins: 60,
 		FloodTier4BanMins:    0,
 		FloodTier4Permanent:  true,
-		FloodTier5Count:      240,
-		FloodTier5WindowMins: 10080,
+		FloodTier5Count:      240, // level 3 perm ban
+		FloodTier5WindowMins: 120,
 		FloodTier5BanMins:    0,
 		FloodTier5Permanent:  true,
 
