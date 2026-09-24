@@ -249,7 +249,11 @@ func encodeBundle(elements []Element, indent bool) ([]byte, error) {
 // the given interval. Non-positive interval uses DefaultSaveInterval.
 // Returns ErrPeriodicSaveRunning if already active.
 func (b *Bundle) StartPeriodicSave(interval time.Duration) error {
-	err := b.saver.Start(interval, DefaultSaveInterval, b.Save, "ipwhitelist")
+	err := b.Save() // initial test save
+	if err != nil {
+		return err
+	}
+	err = b.saver.Start(interval, DefaultSaveInterval, b.Save, "ipwhitelist")
 	if errors.Is(err, persist.ErrAlreadyRunning) {
 		return ErrPeriodicSaveRunning
 	}

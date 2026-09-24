@@ -117,6 +117,14 @@ func (e *Engine) StartPersistence(saveInterval, cleanupInterval time.Duration) e
 	if e == nil || e.Track == nil || e.Bans == nil {
 		return errors.New("flood: engine not initialized")
 	}
+	err := e.Track.Save()
+	if err != nil {
+		return err
+	}
+	err = e.Bans.Save()
+	if err != nil {
+		return err
+	}
 	if err := e.Track.StartPeriodicSave(saveInterval); err != nil {
 		return err
 	}
